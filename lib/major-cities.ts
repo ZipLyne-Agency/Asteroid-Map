@@ -1,0 +1,53 @@
+export interface MajorCity {
+  id: string;
+  name: string;
+  country: string;
+  lat: number;
+  lng: number;
+}
+
+export const MAJOR_CITIES: MajorCity[] = [
+  { id: 'nyc', name: 'New York', country: 'US', lat: 40.7128, lng: -74.006 },
+  { id: 'la', name: 'Los Angeles', country: 'US', lat: 34.0522, lng: -118.2437 },
+  { id: 'chicago', name: 'Chicago', country: 'US', lat: 41.8781, lng: -87.6298 },
+  { id: 'mexico-city', name: 'Mexico City', country: 'MX', lat: 19.4326, lng: -99.1332 },
+  { id: 'toronto', name: 'Toronto', country: 'CA', lat: 43.6532, lng: -79.3832 },
+  { id: 'london', name: 'London', country: 'UK', lat: 51.5074, lng: -0.1278 },
+  { id: 'paris', name: 'Paris', country: 'FR', lat: 48.8566, lng: 2.3522 },
+  { id: 'berlin', name: 'Berlin', country: 'DE', lat: 52.52, lng: 13.405 },
+  { id: 'madrid', name: 'Madrid', country: 'ES', lat: 40.4168, lng: -3.7038 },
+  { id: 'rome', name: 'Rome', country: 'IT', lat: 41.9028, lng: 12.4964 },
+  { id: 'moscow', name: 'Moscow', country: 'RU', lat: 55.7558, lng: 37.6173 },
+  { id: 'istanbul', name: 'Istanbul', country: 'TR', lat: 41.0082, lng: 28.9784 },
+  { id: 'cairo', name: 'Cairo', country: 'EG', lat: 30.0444, lng: 31.2357 },
+  { id: 'lagos', name: 'Lagos', country: 'NG', lat: 6.5244, lng: 3.3792 },
+  { id: 'nairobi', name: 'Nairobi', country: 'KE', lat: -1.2921, lng: 36.8219 },
+  { id: 'johannesburg', name: 'Johannesburg', country: 'ZA', lat: -26.2041, lng: 28.0473 },
+  { id: 'dubai', name: 'Dubai', country: 'AE', lat: 25.2048, lng: 55.2708 },
+  { id: 'riyadh', name: 'Riyadh', country: 'SA', lat: 24.7136, lng: 46.6753 },
+  { id: 'tehran', name: 'Tehran', country: 'IR', lat: 35.6892, lng: 51.389 },
+  { id: 'mumbai', name: 'Mumbai', country: 'IN', lat: 19.076, lng: 72.8777 },
+  { id: 'delhi', name: 'Delhi', country: 'IN', lat: 28.6139, lng: 77.209 },
+  { id: 'bangalore', name: 'Bengaluru', country: 'IN', lat: 12.9716, lng: 77.5946 },
+  { id: 'karachi', name: 'Karachi', country: 'PK', lat: 24.8607, lng: 67.0011 },
+  { id: 'dhaka', name: 'Dhaka', country: 'BD', lat: 23.8103, lng: 90.4125 },
+  { id: 'bangkok', name: 'Bangkok', country: 'TH', lat: 13.7563, lng: 100.5018 },
+  { id: 'singapore', name: 'Singapore', country: 'SG', lat: 1.3521, lng: 103.8198 },
+  { id: 'jakarta', name: 'Jakarta', country: 'ID', lat: -6.2088, lng: 106.8456 },
+  { id: 'manila', name: 'Manila', country: 'PH', lat: 14.5995, lng: 120.9842 },
+  { id: 'beijing', name: 'Beijing', country: 'CN', lat: 39.9042, lng: 116.4074 },
+  { id: 'shanghai', name: 'Shanghai', country: 'CN', lat: 31.2304, lng: 121.4737 },
+  { id: 'hong-kong', name: 'Hong Kong', country: 'HK', lat: 22.3193, lng: 114.1694 },
+  { id: 'seoul', name: 'Seoul', country: 'KR', lat: 37.5665, lng: 126.978 },
+  { id: 'tokyo', name: 'Tokyo', country: 'JP', lat: 35.6762, lng: 139.6503 },
+  { id: 'osaka', name: 'Osaka', country: 'JP', lat: 34.6937, lng: 135.5023 },
+  { id: 'sydney', name: 'Sydney', country: 'AU', lat: -33.8688, lng: 151.2093 },
+  { id: 'melbourne', name: 'Melbourne', country: 'AU', lat: -37.8136, lng: 144.9631 },
+  { id: 'auckland', name: 'Auckland', country: 'NZ', lat: -36.8509, lng: 174.7645 },
+  { id: 'sao-paulo', name: 'Sao Paulo', country: 'BR', lat: -23.5558, lng: -46.6396 },
+  { id: 'rio', name: 'Rio de Janeiro', country: 'BR', lat: -22.9068, lng: -43.1729 },
+  { id: 'buenos-aires', name: 'Buenos Aires', country: 'AR', lat: -34.6037, lng: -58.3816 },
+  { id: 'lima', name: 'Lima', country: 'PE', lat: -12.0464, lng: -77.0428 },
+  { id: 'bogota', name: 'Bogota', country: 'CO', lat: 4.711, lng: -74.0721 },
+  { id: 'santiago', name: 'Santiago', country: 'CL', lat: -33.4489, lng: -70.6693 },
+];
