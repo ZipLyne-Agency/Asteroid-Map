@@ -191,13 +191,13 @@ export default function DirectoryMap() {
 
     const labels = [
       // Crater: centered (0 inner radius)
-      { id: 'crater',   text: '🕳️ CRATER',    color: '#FF5533', pos: offsetPoint(lat, lng, 0,   cr * 0.5) },
+      { id: 'crater',   text: '🕳️ Crater',     color: '#FF5533', pos: offsetPoint(lat, lng, 0,   cr * 0.5) },
       // Fireball: in the ring between crater edge and fireball edge
-      { id: 'fireball', text: '🔥 FIREBALL',   color: '#FF7700', pos: offsetPoint(lat, lng, 45,  (cr + fr) / 2) },
+      { id: 'fireball', text: '🔥 Fireball',   color: '#FF7700', pos: offsetPoint(lat, lng, 45,  (cr + fr) / 2) },
       // Blast: in the ring between fireball and blast
-      { id: 'blast',    text: '💥 BLAST WAVE', color: '#FFAA00', pos: offsetPoint(lat, lng, 135, (fr + br) / 2) },
+      { id: 'blast',    text: '💨 Shockwave',  color: '#FFAA00', pos: offsetPoint(lat, lng, 135, (fr + br) / 2) },
       // Thermal: in the ring between blast and thermal
-      { id: 'thermal',  text: '🌡️ HEAT ZONE',  color: '#FFD600', pos: offsetPoint(lat, lng, 225, (br + tr) / 2) },
+      { id: 'thermal',  text: '🌡️ Heat blast', color: '#FFD600', pos: offsetPoint(lat, lng, 225, (br + tr) / 2) },
     ];
 
     // Only include labels where there's meaningful space (annular ring > 500m)
@@ -259,8 +259,9 @@ export default function DirectoryMap() {
         onClick={handleMapClick}
         onError={(e) => {
           const msg = e.error?.message ?? 'Map failed to load.';
-          // Defer: map errors can fire during Layer render; setState here would update DirectoryMap mid-render.
-          queueMicrotask(() => setMapError(msg));
+          // Map errors can fire during a Layer render; defer the state update to
+          // the next frame so we never setState mid-render.
+          requestAnimationFrame(() => setMapError(msg));
         }}
         mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
       >
@@ -348,13 +349,13 @@ export default function DirectoryMap() {
       {/* ══ IMPACT ZONE LEGEND ══ — top-left of map area */}
       {zonesVisible && results && (
         <div className="glass-sm pointer-events-none absolute left-3 top-3 z-10 rounded-xl p-3 animate-fadeInUp min-w-[190px]">
-          <p className="font-orbitron mb-2 text-[9px] tracking-[0.18em] text-slate-400 uppercase">Impact Zones</p>
+          <p className="mb-2 text-[12px] font-semibold text-white">Damage zones</p>
           <div className="space-y-1.5">
             {[
               { color: '#FF1A00', label: '🕳️ Crater',     r: results.craterDiameter / 2 },
               { color: '#FF4400', label: '🔥 Fireball',    r: results.fireballRadius },
-              { color: '#FF8800', label: '💥 Blast Wave',  r: results.blastRadius },
-              { color: '#FFD600', label: '🌡️ Heat Zone',   r: results.thermalRadius },
+              { color: '#FF8800', label: '💨 Shockwave',   r: results.blastRadius },
+              { color: '#FFD600', label: '🌡️ Heat blast',  r: results.thermalRadius },
             ].map(({ color, label, r }) => (
               <div key={label} className="flex items-center gap-2">
                 <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}80` }} />
@@ -364,7 +365,7 @@ export default function DirectoryMap() {
             ))}
           </div>
           <p className="mt-2 text-[9px] text-slate-600 leading-relaxed">
-            Drag the 🎯 marker to move impact point
+            Drag the 🎯 to move where it hits
           </p>
         </div>
       )}
@@ -380,7 +381,7 @@ export default function DirectoryMap() {
       {!location && simulationStatus === 'idle' && mapReady && (
         <div className="pointer-events-none absolute bottom-8 left-1/2 z-10 -translate-x-1/2">
           <div className="glass-sm rounded-full px-4 py-2 text-[11px] text-slate-400">
-            Tap anywhere to drop an asteroid here
+            Tap any spot to drop the asteroid there
           </div>
         </div>
       )}

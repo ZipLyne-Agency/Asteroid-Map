@@ -1,78 +1,66 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, FormEvent } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback, FormEvent } from 'react';
 import dynamic from 'next/dynamic';
-import { Drawer } from 'vaul';
 import { useAppStore, hydrateFromUrl, DENSITY_PRESETS, type DensityPreset } from '@/lib/store';
 import type { Asteroid } from '@/lib/store';
 import { calculateImpact, estimateCasualties, ASTEROID_DENSITIES, TARGET_DENSITIES } from '@/lib/physics';
 import { KNOWN_ASTEROID_CATEGORIES, type KnownAsteroidCategory } from '@/lib/known-asteroids';
 import { MAJOR_CITIES } from '@/lib/major-cities';
-import { Play, Share2, Check, Search, ChevronDown, RotateCcw, MapPin, Rocket, BarChart3 } from 'lucide-react';
+import { Play, Share2, Check, Search, ChevronDown, RotateCcw, ChevronUp } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const DirectoryMap = dynamic(() => import('@/components/DirectoryMap'), { ssr: false });
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Plain-English formatting ─────────────────────────────────────────────────
 
 function formatBig(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} billion`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} million`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)},000`;
   return Math.round(n).toLocaleString();
 }
 
 function formatDist(m: number): string {
-  if (m >= 1_000_000) return `${(m / 1000).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} km`;
-  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
+  if (m >= 1000) return `${(m / 1000).toFixed(m >= 100000 ? 0 : 1)} km`;
   return `${Math.round(m)} m`;
 }
 
-function formatMegatons(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return '0';
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  if (n >= 10) return n.toFixed(0);
-  if (n >= 1) return n.toFixed(1);
-  if (n >= 0.01) return n.toFixed(2);
-  return n.toFixed(4);
+/** Energy in "Hiroshima bombs" — the comparison everyone understands. */
+function hiroshimas(energyMt: number): string {
+  const n = energyMt / 0.015; // Hiroshima ≈ 15 kilotons
+  if (n < 1) return 'less than one';
+  return formatBig(n);
 }
 
-function sizeLabel(m: number): string {
-  if (m < 5) return 'Car-sized';
-  if (m < 20) return 'House-sized';
-  if (m < 50) return 'Building-sized';
-  if (m < 100) return 'Football field';
-  if (m < 500) return 'Skyscraper-sized';
-  if (m < 1000) return 'Mountain-sized';
-  if (m < 15000) return 'Dino-killer class';
-  return 'Planet-killer';
+/** Crater width in a relatable unit. */
+function craterCompare(m: number): string {
+  if (m < 100) return 'about the size of a soccer field';
+  const fields = Math.round(m / 105); // football field ≈ 105 m
+  if (fields < 60) return `as wide as ${fields} football fields`;
+  return `wider than most cities`;
 }
 
-const SEVERITY: Record<string, { label: string; color: string; desc: string }> = {
-  low:      { label: 'Small',       color: 'text-emerald-300', desc: 'Would mess up a neighborhood.' },
-  moderate: { label: 'Big',         color: 'text-amber-300',   desc: 'Would flatten a whole city.' },
-  high:     { label: 'Huge',        color: 'text-orange-300',  desc: 'Would destroy an entire country.' },
-  extreme:  { label: 'Dino-Killer', color: 'text-red-300',     desc: 'This is the kind that wiped out the dinosaurs.' },
+const SEVERITY: Record<string, { label: string; emoji: string; color: string; ring: string; desc: string }> = {
+  low: {
+    label: 'A local scare', emoji: '😮', color: 'text-emerald-300', ring: 'border-emerald-500/40 bg-emerald-500/10',
+    desc: 'Enough to wreck a few blocks and break a lot of windows.',
+  },
+  moderate: {
+    label: 'A city-flattener', emoji: '😨', color: 'text-amber-300', ring: 'border-amber-500/40 bg-amber-500/10',
+    desc: 'This could level a whole city. Everyone for miles would feel it.',
+  },
+  high: {
+    label: 'A country-wrecker', emoji: '😱', color: 'text-orange-300', ring: 'border-orange-500/40 bg-orange-500/10',
+    desc: 'Damage on the scale of an entire region or small country.',
+  },
+  extreme: {
+    label: 'A dinosaur-killer', emoji: '🦕', color: 'text-red-300', ring: 'border-red-500/50 bg-red-500/12',
+    desc: 'This is the kind of impact that ended the age of the dinosaurs.',
+  },
 };
 
-// ── All known asteroids flattened ────────────────────────────────────────────
-const ALL_KNOWN = Object.entries(KNOWN_ASTEROID_CATEGORIES).flatMap(([catKey, cat]) =>
-  cat.items.map((a) => ({ ...a, _cat: catKey as KnownAsteroidCategory, _catLabel: cat.label }))
-);
-
-const UNIQUE_ASTEROIDS = (() => {
-  const seen = new Set<string>();
-  return ALL_KNOWN.filter((a) => {
-    if (seen.has(a.id)) return false;
-    seen.add(a.id);
-    return true;
-  });
-})();
-
-// ── Mobile step types ────────────────────────────────────────────────────────
-type MobileStep = 'location' | 'asteroid' | 'results';
-
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const location = useAppStore((s) => s.location);
@@ -92,31 +80,19 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedCityId, setSelectedCityId] = useState('');
-  const [asteroidFilter, setAsteroidFilter] = useState('');
 
-  // Mobile state
   const isMobile = useIsMobile();
-  const [mobileStep, setMobileStep] = useState<MobileStep>('location');
-  const [snapPoint, setSnapPoint] = useState<number | string | null>(0.16);
+  const [sheetOpen, setSheetOpen] = useState(false); // mobile: is the picker/results sheet expanded
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const asteroidAnchorRef = useRef<HTMLDivElement>(null);
 
-  // Hydrate from URL on first load
   useEffect(() => { hydrateFromUrl(); }, []);
-
-  // Auto-advance step on mobile when location is set via map tap
-  useEffect(() => {
-    if (!isMobile || !location) return;
-    if (mobileStep === 'location') {
-      setTimeout(() => {
-        setMobileStep('asteroid');
-        setSnapPoint(0.16);
-      }, 350);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location?.lat, location?.lng, isMobile]);
 
   const canSimulate = Boolean(location && asteroid);
   const isCompleted = simulationStatus === 'completed';
+  const isRunning = simulationStatus === 'running';
 
+  // ── Actions ──────────────────────────────────────────────────────────────────
   const handleSimulate = useCallback(() => {
     if (!location || !asteroid) return;
     setSimulationStatus('running');
@@ -130,20 +106,14 @@ export default function Home() {
     setResults(r);
     setTimeout(() => {
       setSimulationStatus('completed');
-      if (isMobile) {
-        setMobileStep('results');
-        setSnapPoint(0.55);
-      }
+      if (isMobile) setSheetOpen(true);
     }, 2600);
   }, [location, asteroid, setSimulationStatus, setResults, isMobile]);
 
   const handleReset = useCallback(() => {
     setSimulationStatus('idle');
     setResults(null);
-    if (isMobile) {
-      setMobileStep('location');
-      setSnapPoint(0.16);
-    }
+    if (isMobile) setSheetOpen(false);
   }, [setSimulationStatus, setResults, isMobile]);
 
   const handleShare = useCallback(() => {
@@ -158,7 +128,6 @@ export default function Home() {
     }
   }, [asteroid, location]);
 
-  // City search
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -178,541 +147,385 @@ export default function Home() {
     }
   };
 
-  const handleCitySelect = (cityId: string) => {
+  const pickCity = (cityId: string) => {
     setSelectedCityId(cityId);
     const city = MAJOR_CITIES.find((c) => c.id === cityId);
     if (!city) return;
     setLocation({ lng: city.lng, lat: city.lat, name: `${city.name}, ${city.country}` });
     setSearchResults([]);
     setSearchError(null);
-    if (isMobile) {
-      setMobileStep('asteroid');
-      setSnapPoint(0.16);
-    }
+    // gently nudge toward step 2
+    setTimeout(() => asteroidAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
   };
 
-  const handleAsteroidSelect = useCallback((a: Asteroid) => {
-    setAsteroid(a);
-    if (isMobile) {
-      setSnapPoint(0.16);
-    }
-  }, [setAsteroid, isMobile]);
+  const pickAsteroid = useCallback((a: Asteroid) => setAsteroid(a), [setAsteroid]);
 
-  // Filtered asteroids
-  const filteredAsteroids = useMemo(() => {
-    if (!asteroidFilter) return UNIQUE_ASTEROIDS;
-    const q = asteroidFilter.toLowerCase();
-    return UNIQUE_ASTEROIDS.filter((a) => a.name.toLowerCase().includes(q));
-  }, [asteroidFilter]);
-
-  // Casualties
   const density = DENSITY_PRESETS[densityPreset].value;
   const casualties = results ? estimateCasualties(results, density) : null;
   const severity = results ? (SEVERITY[results.severity] ?? SEVERITY.moderate) : null;
 
-  // ── Shared content sections ──────────────────────────────────────────────────
+  // ── The one button that's always visible. It always names the next step. ─────
+  const cta = useMemo(() => {
+    if (isRunning) return { label: 'Incoming…', sub: '', mode: 'running' as const };
+    if (isCompleted) return { label: 'Try another', sub: '', mode: 'reset' as const };
+    if (!location) return { label: 'Pick a place to start', sub: 'Step 1 of 2', mode: 'guide-loc' as const };
+    if (!asteroid) return { label: 'Now pick an asteroid', sub: 'Step 2 of 2', mode: 'guide-ast' as const };
+    return { label: 'Simulate the impact', sub: `${asteroid.name} → ${location.name.split(',')[0]}`, mode: 'go' as const };
+  }, [isRunning, isCompleted, location, asteroid]);
 
-  const LocationSection = (
+  const onCta = useCallback(() => {
+    switch (cta.mode) {
+      case 'go': handleSimulate(); break;
+      case 'reset': handleReset(); break;
+      case 'guide-loc':
+        if (isMobile) setSheetOpen(true);
+        else scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        break;
+      case 'guide-ast':
+        if (isMobile) setSheetOpen(true);
+        else asteroidAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+    }
+  }, [cta.mode, handleSimulate, handleReset, isMobile]);
+
+  // ── Reusable bits ─────────────────────────────────────────────────────────────
+
+  const LocationCard = (
     <section>
-      <label className="mb-2 block font-orbitron text-[9px] font-semibold tracking-[0.16em] text-cyan-300 uppercase">
-        1. Where should it hit?
-      </label>
+      <h2 className="mb-2.5 flex items-center gap-2 text-[15px] font-semibold text-white">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-orange-500/15 text-[11px] font-bold text-orange-300">1</span>
+        Where should it hit?
+      </h2>
 
       {location && (
-        <div className="mb-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-2.5">
-          <p className="text-[13px] font-semibold text-white leading-tight">{location.name}</p>
-          <p className="font-mono text-[10px] text-cyan-400 mt-0.5">{location.lat.toFixed(4)}°, {location.lng.toFixed(4)}°</p>
+        <div className="mb-2.5 flex items-center gap-2.5 rounded-xl border border-orange-500/25 bg-orange-500/8 px-3 py-2.5">
+          <span className="text-lg">📍</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-semibold text-white">{location.name}</p>
+            <p className="font-mono text-[11px] text-orange-300/80">{location.lat.toFixed(3)}°, {location.lng.toFixed(3)}°</p>
+          </div>
         </div>
       )}
 
       <div className="relative">
         <select
           value={selectedCityId}
-          onChange={(e) => handleCitySelect(e.target.value)}
-          className="w-full appearance-none rounded-xl border border-white/8 bg-[rgba(5,7,18,0.65)] px-3 py-3 pr-8 text-white outline-none transition focus:border-violet-500/60"
+          onChange={(e) => pickCity(e.target.value)}
+          className="w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 pr-9 text-[15px] text-white outline-none transition focus:border-orange-500/60"
           style={{ fontSize: '16px' }}
         >
-          <option value="">Pick a famous city…</option>
-          {MAJOR_CITIES.map((city) => (
-            <option key={city.id} value={city.id}>{city.name}, {city.country}</option>
-          ))}
+          <option value="">Choose a city…</option>
+          {MAJOR_CITIES.map((c) => <option key={c.id} value={c.id}>{c.name}, {c.country}</option>)}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
       </div>
 
-      <form onSubmit={handleSearch} className="mt-2 flex gap-1.5">
+      <form onSubmit={handleSearch} className="mt-2 flex gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Or search any place…"
-            className="w-full rounded-xl border border-white/8 bg-[rgba(5,7,18,0.65)] py-3 pl-9 pr-3 text-white outline-none placeholder:text-slate-600 focus:border-violet-500/60"
+            type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="…or search any place on Earth"
+            className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-9 pr-3 text-[15px] text-white outline-none placeholder:text-slate-500 focus:border-orange-500/60"
             style={{ fontSize: '16px' }}
           />
         </div>
-        <button
-          type="submit"
-          disabled={isSearching}
-          className="press-feedback rounded-xl border border-violet-500/40 bg-violet-600/25 px-4 py-3 text-[13px] font-semibold text-violet-200 hover:bg-violet-600/40 disabled:opacity-50 min-w-[56px]"
-        >
+        <button type="submit" disabled={isSearching}
+          className="press-feedback rounded-xl border border-orange-500/40 bg-orange-500/15 px-4 text-[14px] font-semibold text-orange-200 hover:bg-orange-500/25 disabled:opacity-50">
           Go
         </button>
       </form>
-      {searchError && <p className="mt-1.5 text-[11px] text-amber-300">{searchError}</p>}
+      {searchError && <p className="mt-1.5 text-[12px] text-amber-300">{searchError}</p>}
       {searchResults.length > 0 && (
-        <div className="mt-1.5 rounded-xl border border-white/6 overflow-hidden">
+        <div className="mt-1.5 overflow-hidden rounded-xl border border-white/10">
           {searchResults.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => { setLocation({ lng: r.lng, lat: r.lat, name: r.placeName }); setSearchResults([]); setSearchError(null); setSearchQuery(''); if (isMobile) { setMobileStep('asteroid'); setSnapPoint(0.16); } }}
-              className="press-feedback flex w-full items-center px-4 py-3.5 text-left text-[14px] text-slate-300 hover:bg-violet-500/10 hover:text-white border-b border-white/4 last:border-0 min-h-[44px]"
-            >
+            <button key={r.id} type="button"
+              onClick={() => { setLocation({ lng: r.lng, lat: r.lat, name: r.placeName }); setSearchResults([]); setSearchError(null); setSearchQuery(''); setTimeout(() => asteroidAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120); }}
+              className="press-feedback flex w-full items-center border-b border-white/5 px-4 py-3 text-left text-[14px] text-slate-300 last:border-0 hover:bg-orange-500/10 hover:text-white">
               {r.placeName}
             </button>
           ))}
         </div>
       )}
-      {!isMobile && <p className="mt-1.5 text-[9px] text-slate-600 text-center">or tap anywhere on the map</p>}
-      {isMobile && <p className="mt-1.5 text-[11px] text-slate-600 text-center">or tap anywhere on the map</p>}
+      <p className="mt-2 text-center text-[12px] text-slate-500">or just tap anywhere on the map 👆</p>
     </section>
   );
 
-  const AsteroidSection = (
-    <section>
-      <label className="mb-2 block font-orbitron text-[9px] font-semibold tracking-[0.16em] text-amber-300 uppercase">
-        2. Pick a space rock
-      </label>
+  const AsteroidCard = (
+    <section ref={asteroidAnchorRef}>
+      <h2 className="mb-2.5 flex items-center gap-2 text-[15px] font-semibold text-white">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-orange-500/15 text-[11px] font-bold text-orange-300">2</span>
+        Which asteroid?
+      </h2>
 
-      <div className="relative mb-2">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
-        <input
-          type="text"
-          value={asteroidFilter}
-          onChange={(e) => setAsteroidFilter(e.target.value)}
-          placeholder="Search asteroids…"
-          className="w-full rounded-xl border border-white/8 bg-[rgba(5,7,18,0.65)] py-3 pl-9 pr-3 text-white outline-none placeholder:text-slate-600 focus:border-violet-500/60"
-          style={{ fontSize: '16px' }}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        {(Object.entries(KNOWN_ASTEROID_CATEGORIES) as [KnownAsteroidCategory, typeof KNOWN_ASTEROID_CATEGORIES[KnownAsteroidCategory]][]).map(([catKey, cat]) => {
-          const items = cat.items.filter((a) =>
-            !asteroidFilter || a.name.toLowerCase().includes(asteroidFilter.toLowerCase())
-          );
-          if (items.length === 0) return null;
-          return (
-            <div key={catKey}>
-              <p className="text-[9px] font-semibold tracking-widest text-slate-500 uppercase mb-1 mt-2 first:mt-0">
-                {cat.emoji} {cat.label}
-              </p>
-              {items.map((a) => (
-                <button
-                  key={`${catKey}-${a.id}`}
-                  type="button"
-                  onClick={() => handleAsteroidSelect(a as Asteroid)}
-                  className={`press-feedback w-full rounded-xl border p-3 text-left transition-all mb-1 ${
-                    asteroid?.id === a.id
-                      ? 'border-violet-400/50 bg-violet-500/12'
-                      : 'border-white/6 bg-white/[0.02] hover:border-white/12 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-semibold text-white leading-tight">{a.name}</p>
-                    {a.isPotentiallyHazardous && (
-                      <span className="shrink-0 rounded-full border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 font-orbitron text-[7px] tracking-widest text-red-300">DANGER</span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
-                    <span><span className="text-slate-600">Size </span>{a.diameter >= 1000 ? `${(a.diameter/1000).toFixed(1)} km` : `${a.diameter} m`}</span>
-                    <span><span className="text-slate-600">Speed </span>{a.velocity} km/s</span>
-                    <span className="text-slate-600 ml-auto">{sizeLabel(a.diameter)}</span>
-                  </div>
-                  {a.missDistance && (
-                    <p className="mt-0.5 text-[10px] text-slate-500 truncate">Miss: {a.missDistance}</p>
-                  )}
-                </button>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-
-  const ResultsSection = results && casualties && severity && location && asteroid ? (
-    <section className="space-y-4">
-      {/* Severity */}
-      <div className={`rounded-xl border p-3.5 ${
-        results.severity === 'extreme' ? 'border-red-500/40 bg-red-500/8' :
-        results.severity === 'high' ? 'border-orange-500/40 bg-orange-500/8' :
-        results.severity === 'moderate' ? 'border-amber-500/40 bg-amber-500/8' :
-        'border-emerald-500/40 bg-emerald-500/8'
-      }`}>
-        <div className="flex items-center justify-between mb-1">
-          <span className="font-orbitron text-[9px] tracking-widest text-slate-500 uppercase">How bad?</span>
-          <span className={`font-orbitron text-[11px] font-bold tracking-wide uppercase ${severity.color}`}>{severity.label}</span>
-        </div>
-        <p className="text-[13px] text-slate-300 leading-relaxed">{severity.desc}</p>
-      </div>
-
-      {/* Explosion */}
-      <div className="glass-inner rounded-xl p-3.5">
-        <p className="font-orbitron text-[9px] tracking-widest text-slate-500 uppercase mb-1">Explosion</p>
-        <p className="font-orbitron text-3xl font-black bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent leading-none">
-          {formatMegatons(results.energyMt)} <span className="text-lg">Mt</span>
-        </p>
-        <p className="mt-1 text-[11px] text-slate-500">
-          {Math.round(results.energyMt / 0.015).toLocaleString()}x the Hiroshima bomb
-        </p>
-      </div>
-
-      {/* Casualties */}
-      <div>
-        <p className="font-orbitron text-[9px] tracking-widest text-slate-500 uppercase mb-2">People affected</p>
-        <div className="grid grid-cols-4 gap-1 mb-2">
-          {(Object.keys(DENSITY_PRESETS) as DensityPreset[]).map((key) => (
-            <button key={key} type="button" onClick={() => setDensityPreset(key)}
-              className={`press-feedback rounded-lg border px-1.5 py-2 text-center transition text-[10px] min-h-[44px] ${
-                densityPreset === key
-                  ? 'border-violet-500/40 bg-violet-500/12 text-violet-200'
-                  : 'border-white/5 bg-white/[0.02] text-slate-500 hover:text-slate-300'
-              }`}>
-              <p className="font-semibold leading-tight">{DENSITY_PRESETS[key].label}</p>
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="glass-inner rounded-xl p-3 text-center">
-            <p className="font-orbitron text-[8px] tracking-widest text-red-400/70 uppercase mb-0.5">Deaths</p>
-            <p className="font-orbitron text-xl font-black text-red-300">{formatBig(casualties.totalDeaths)}</p>
-          </div>
-          <div className="glass-inner rounded-xl p-3 text-center">
-            <p className="font-orbitron text-[8px] tracking-widest text-amber-400/70 uppercase mb-0.5">Injured</p>
-            <p className="font-orbitron text-xl font-black text-amber-300">{formatBig(casualties.totalInjuries)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Destruction zones */}
-      <div className="space-y-1.5">
-        <p className="font-orbitron text-[9px] tracking-widest text-slate-500 uppercase">Damage zones</p>
-        {[
-          { emoji: '🕳️', label: 'Crater', color: '#FF1A00', radius: results.craterDiameter / 2, desc: 'Everything vaporized' },
-          { emoji: '🔥', label: 'Fireball', color: '#FF4400', radius: results.fireballRadius, desc: 'Everything catches fire' },
-          { emoji: '💥', label: 'Shock wave', color: '#FF8800', radius: results.blastRadius, desc: 'Buildings knocked down' },
-          { emoji: '🌡️', label: 'Burns', color: '#FFD600', radius: results.thermalRadius, desc: 'Burns skin at this distance' },
-        ].map((zone) => (
-          <div key={zone.label} className="flex items-center gap-3 rounded-xl bg-white/[0.02] p-3 min-h-[52px]">
-            <span className="text-xl">{zone.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-white">{zone.label}</span>
-                <span className="font-mono text-[11px] text-slate-400">{formatDist(zone.radius)}</span>
-              </div>
-              <p className="text-[10px] text-slate-500">{zone.desc}</p>
+      <div className="space-y-3">
+        {(Object.entries(KNOWN_ASTEROID_CATEGORIES) as [KnownAsteroidCategory, typeof KNOWN_ASTEROID_CATEGORIES[KnownAsteroidCategory]][]).map(([catKey, cat]) => (
+          <div key={catKey}>
+            <p className="mb-1.5 text-[12px] font-semibold text-slate-400">{cat.emoji} {cat.label}</p>
+            <div className="space-y-1.5">
+              {cat.items.map((a) => {
+                const selected = asteroid?.id === a.id;
+                return (
+                  <button key={a.id} type="button" onClick={() => pickAsteroid(a as Asteroid)}
+                    className={`press-feedback w-full rounded-xl border p-3 text-left transition-all ${
+                      selected ? 'border-orange-400/60 bg-orange-500/12 ring-1 ring-orange-400/30'
+                               : 'border-white/8 bg-white/[0.02] hover:border-white/16 hover:bg-white/[0.04]'}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-xl leading-none">{a.emoji ?? '☄️'}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[14px] font-semibold text-white">{a.name}</p>
+                          {selected && <Check className="ml-auto h-4 w-4 shrink-0 text-orange-300" />}
+                        </div>
+                        <p className="mt-0.5 text-[12.5px] leading-snug text-slate-400">{a.blurb}</p>
+                        <p className="mt-1 text-[11.5px] text-slate-500">
+                          {a.diameter >= 1000 ? `${(a.diameter / 1000).toFixed(1)} km wide` : `${a.diameter} m wide`}
+                          {' · '}{a.velocity} km/s
+                          {a.date ? ` · ${a.date}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
+    </section>
+  );
 
-      {/* Key stats */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="glass-inner rounded-xl p-3">
-          <p className="text-[8px] font-orbitron tracking-widest text-slate-500 uppercase">Speed</p>
-          <p className="font-mono text-[14px] font-semibold text-white mt-0.5">{results.impactVelocity.toFixed(1)} km/s</p>
+  const ResultsContent = results && casualties && severity && location && asteroid ? (
+    <section className="space-y-4">
+      {/* Verdict */}
+      <div className={`rounded-2xl border p-4 ${severity.ring}`}>
+        <p className="text-[12px] font-medium text-slate-300">If {asteroid.name} hit {location.name.split(',')[0]}…</p>
+        <p className="mt-1 flex items-center gap-2 text-[22px] font-bold leading-tight text-white">
+          <span>{severity.emoji}</span>
+          <span className={severity.color}>{severity.label}</span>
+        </p>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-300">{severity.desc}</p>
+      </div>
+
+      {/* The boom */}
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+        <p className="text-[12px] font-medium text-slate-400">💥 The explosion was as powerful as</p>
+        <p className="mt-1 text-[28px] font-black leading-none text-orange-300">
+          {hiroshimas(results.energyMt)} <span className="text-[18px] font-bold text-orange-200/80">Hiroshima bombs</span>
+        </p>
+        <p className="mt-1.5 text-[12px] text-slate-500">({results.energyMt >= 1 ? `${results.energyMt.toFixed(0)} megatons of TNT` : `${(results.energyMt * 1000).toFixed(0)} kilotons of TNT`})</p>
+      </div>
+
+      {/* People */}
+      <div>
+        <p className="mb-1.5 text-[13px] font-semibold text-white">👥 People in the area</p>
+        <p className="mb-2 text-[12px] text-slate-500">How crowded is the spot it hit?</p>
+        <div className="mb-2 grid grid-cols-2 gap-1.5">
+          {(Object.keys(DENSITY_PRESETS) as DensityPreset[]).map((key) => (
+            <button key={key} type="button" onClick={() => setDensityPreset(key)}
+              className={`press-feedback rounded-xl border px-2.5 py-2.5 text-left transition ${
+                densityPreset === key ? 'border-orange-500/50 bg-orange-500/12' : 'border-white/8 bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+              <p className={`text-[13px] font-semibold ${densityPreset === key ? 'text-orange-200' : 'text-slate-300'}`}>{DENSITY_PRESETS[key].label}</p>
+              <p className="text-[10.5px] text-slate-500">{DENSITY_PRESETS[key].sublabel}</p>
+            </button>
+          ))}
         </div>
-        <div className="glass-inner rounded-xl p-3">
-          <p className="text-[8px] font-orbitron tracking-widest text-slate-500 uppercase">Earthquake</p>
-          <p className="font-mono text-[14px] font-semibold text-white mt-0.5">M {results.seismicMagnitude.toFixed(1)}</p>
-        </div>
-        <div className="glass-inner rounded-xl p-3">
-          <p className="text-[8px] font-orbitron tracking-widest text-slate-500 uppercase">Crater</p>
-          <p className="font-mono text-[14px] font-semibold text-white mt-0.5">{formatDist(results.craterDiameter)} wide</p>
-        </div>
-        <div className="glass-inner rounded-xl p-3">
-          <p className="text-[8px] font-orbitron tracking-widest text-slate-500 uppercase">Weight</p>
-          <p className="font-mono text-[14px] font-semibold text-white mt-0.5">{formatBig(results.massKg)} kg</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3 text-center">
+            <p className="text-[11px] font-medium text-red-300/80">Could not survive</p>
+            <p className="mt-0.5 text-[20px] font-black text-red-300">{formatBig(casualties.totalDeaths)}</p>
+          </div>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-center">
+            <p className="text-[11px] font-medium text-amber-300/80">Would be hurt</p>
+            <p className="mt-0.5 text-[20px] font-black text-amber-300">{formatBig(casualties.totalInjuries)}</p>
+          </div>
         </div>
       </div>
 
-      <p className="text-[10px] text-slate-600 text-center leading-relaxed">
-        Based on real science (Collins et al. 2005) — for fun &amp; learning, not a real warning!
+      {/* Damage zones */}
+      <div>
+        <p className="mb-2 text-[13px] font-semibold text-white">🎯 How far the damage spreads</p>
+        <div className="space-y-1.5">
+          {[
+            { emoji: '🕳️', label: 'The crater', desc: 'A hole punched into the ground', r: results.craterDiameter / 2, color: '#FF3B1F' },
+            { emoji: '🔥', label: 'Fireball', desc: 'Everything inside is vaporized', r: results.fireballRadius, color: '#FF6B2C' },
+            { emoji: '💨', label: 'Shockwave', desc: 'Buildings knocked flat', r: results.blastRadius, color: '#FF9F1C' },
+            { emoji: '🌡️', label: 'Heat blast', desc: 'Severe burns out to here', r: results.thermalRadius, color: '#FFD23F' },
+          ].map((z) => (
+            <div key={z.label} className="flex items-center gap-3 rounded-xl bg-white/[0.02] p-2.5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-lg" style={{ background: `${z.color}1a` }}>{z.emoji}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[13.5px] font-semibold text-white">{z.label}</span>
+                  <span className="font-mono text-[12px] text-slate-400">{formatDist(z.r)} out</span>
+                </div>
+                <p className="text-[11.5px] text-slate-500">{z.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fun facts */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+          <p className="text-[11px] text-slate-500">Crater size</p>
+          <p className="mt-0.5 text-[13px] font-semibold text-white">{formatDist(results.craterDiameter)} wide</p>
+          <p className="text-[10.5px] text-slate-500">{craterCompare(results.craterDiameter)}</p>
+        </div>
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+          <p className="text-[11px] text-slate-500">Ground shaking</p>
+          <p className="mt-0.5 text-[13px] font-semibold text-white">Magnitude {results.seismicMagnitude.toFixed(1)}</p>
+          <p className="text-[10.5px] text-slate-500">like a {results.seismicMagnitude >= 7 ? 'massive' : results.seismicMagnitude >= 5 ? 'major' : 'small'} earthquake</p>
+        </div>
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+          <p className="text-[11px] text-slate-500">Speed of impact</p>
+          <p className="mt-0.5 text-[13px] font-semibold text-white">{results.impactVelocity.toFixed(0)} km/s</p>
+          <p className="text-[10.5px] text-slate-500">~{Math.round(results.impactVelocity)}× faster than a bullet</p>
+        </div>
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+          <p className="text-[11px] text-slate-500">Asteroid weight</p>
+          <p className="mt-0.5 text-[13px] font-semibold text-white">{formatBig(results.massKg)} kg</p>
+          <p className="text-[10.5px] text-slate-500">of solid space rock</p>
+        </div>
+      </div>
+
+      <button type="button" onClick={handleShare}
+        className="press-feedback flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] py-3 text-[14px] font-semibold text-white hover:bg-white/[0.08]">
+        {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
+        {copied ? 'Link copied!' : 'Share this impact'}
+      </button>
+
+      <p className="text-center text-[11px] leading-relaxed text-slate-600">
+        Just for fun and learning — not a real prediction. Built on real impact science.
       </p>
     </section>
-  ) : (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <p className="text-[14px] text-slate-500">Run a simulation first to see results.</p>
+  ) : null;
+
+  // The big persistent button (shared desktop + mobile)
+  const BigButton = (
+    <button type="button" onClick={onCta} disabled={isRunning}
+      className={`press-feedback w-full rounded-2xl px-4 py-3.5 text-center transition-all ${
+        cta.mode === 'go' ? 'impact-btn-active text-white'
+        : cta.mode === 'reset' ? 'border border-white/14 bg-white/[0.06] text-white hover:bg-white/[0.1]'
+        : cta.mode === 'running' ? 'cursor-default bg-orange-600/30 text-orange-200'
+        : 'border border-orange-500/30 bg-orange-500/10 text-orange-200 hover:bg-orange-500/16'}`}>
+      <span className="flex items-center justify-center gap-2 text-[16px] font-bold">
+        {cta.mode === 'go' && <Play className="h-5 w-5 fill-current" />}
+        {cta.mode === 'reset' && <RotateCcw className="h-4 w-4" />}
+        {cta.mode === 'go' ? '💥 ' : ''}{cta.label}
+      </span>
+      {cta.sub && <span className="mt-0.5 block truncate text-[11.5px] font-medium opacity-70">{cta.sub}</span>}
+    </button>
+  );
+
+  const RunningOverlay = isRunning ? (
+    <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-[#07080f]/70 backdrop-blur-sm">
+      <div className="glass animate-impact-flash rounded-2xl px-10 py-8 text-center">
+        <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+          <div className="animate-target-ring absolute inset-0 rounded-full border-2 border-red-500/60" />
+          <div className="animate-target-ring absolute inset-0 rounded-full border border-orange-400/40" style={{ animationDelay: '0.6s' }} />
+          <div className="relative h-6 w-6 rounded-full bg-red-600 shadow-[0_0_20px_rgba(220,38,38,0.9)]">
+            <div className="absolute inset-0 animate-ping rounded-full bg-red-400/60" />
+          </div>
+        </div>
+        <h2 className="text-[20px] font-black text-orange-300">💥 Impact!</h2>
+        <p className="mt-1 text-[13px] text-slate-400">Working out the damage…</p>
+      </div>
+    </div>
+  ) : null;
+
+  const Logo = (
+    <div className="flex items-center gap-2.5">
+      <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-orange-500/30 to-red-600/20 text-base">☄️</div>
+      <div>
+        <p className="text-[15px] font-bold leading-none text-white">Asteroid Map</p>
+        <p className="mt-0.5 text-[11px] leading-none text-slate-500">Drop a space rock anywhere</p>
+      </div>
     </div>
   );
 
-  // ── MOBILE LAYOUT ────────────────────────────────────────────────────────────
+  // ── MOBILE ──────────────────────────────────────────────────────────────────
   if (isMobile) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#07080f]">
-        {/* ═══ MOBILE HEADER ═══ */}
-        <header
-          className="glass relative z-40 flex shrink-0 items-center border-b border-white/[0.07] px-4 gap-3"
-          style={{
-            height: 'calc(48px + env(safe-area-inset-top))',
-            paddingTop: 'env(safe-area-inset-top)',
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-500/25 bg-gradient-to-br from-red-600/20 to-orange-600/10">
-              <span className="text-sm">☄️</span>
-            </div>
-            <p className="font-orbitron text-[11px] font-bold tracking-[0.12em] text-white">ASTEROID MAP</p>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {isCompleted && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="press-feedback flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-[11px] font-semibold text-violet-300 min-h-[36px]"
-                >
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-                  {copied ? 'Copied!' : 'Share'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="press-feedback flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-3 py-2 text-[11px] text-slate-400 min-h-[36px]"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
+        <header className="z-40 flex shrink-0 items-center border-b border-white/[0.07] bg-[#07080f]/90 px-4"
+          style={{ height: 'calc(54px + env(safe-area-inset-top))', paddingTop: 'env(safe-area-inset-top)' }}>
+          {Logo}
         </header>
 
-        {/* ═══ MAP (full screen beneath the sheet) ═══ */}
-        <div className="relative flex-1 min-h-0 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <DirectoryMap />
+          {RunningOverlay}
 
-          {/* Running overlay */}
-          {simulationStatus === 'running' && (
-            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-[#07080f]/65 backdrop-blur-sm">
-              <div className="glass rounded-2xl px-10 py-8 text-center animate-impact-flash">
-                <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
-                  <div className="animate-target-ring absolute inset-0 rounded-full border-2 border-red-500/60" />
-                  <div className="animate-target-ring absolute inset-0 rounded-full border border-orange-400/40" style={{ animationDelay: '0.6s' }} />
-                  <div className="relative h-6 w-6 rounded-full bg-red-600 shadow-[0_0_20px_rgba(220,38,38,0.9)]">
-                    <div className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
-                  </div>
+          {/* Bottom panel — the action button is ALWAYS at the bottom, always visible */}
+          <div className="absolute inset-x-0 bottom-0 z-40 flex max-h-[72dvh] flex-col rounded-t-3xl border-t border-white/12 bg-[#0a0e1a]/97 backdrop-blur-xl"
+            style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.55)' }}>
+            {/* Expandable content */}
+            {sheetOpen && (
+              <>
+                <button type="button" onClick={() => setSheetOpen(false)} className="flex shrink-0 items-center justify-center gap-1.5 py-2.5 text-[12px] font-medium text-slate-400">
+                  <ChevronDown className="h-4 w-4" /> Tap to minimize
+                </button>
+                <div ref={scrollRef} className="custom-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-3">
+                  {isCompleted ? ResultsContent : (<>{LocationCard}{AsteroidCard}</>)}
                 </div>
-                <h2 className="font-orbitron text-lg font-black tracking-[0.15em] text-red-300">INCOMING!</h2>
-                <div className="my-2 flex justify-center gap-1">
-                  <div className="dot-1 h-1.5 w-1.5 rounded-full bg-orange-400" />
-                  <div className="dot-2 h-1.5 w-1.5 rounded-full bg-orange-400" />
-                  <div className="dot-3 h-1.5 w-1.5 rounded-full bg-orange-400" />
+              </>
+            )}
+
+            {/* Collapsed handle — tap to open pickers */}
+            {!sheetOpen && (
+              <button type="button" onClick={() => setSheetOpen(true)} className="flex shrink-0 items-center gap-3 px-4 pb-1 pt-3">
+                <span className="text-xl">{asteroid?.emoji ?? '☄️'}</span>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-[13.5px] font-semibold text-white">
+                    {isCompleted ? 'See the full results' : !location ? 'Pick a target city' : !asteroid ? 'Pick an asteroid' : `${asteroid.name} → ${location.name.split(',')[0]}`}
+                  </p>
+                  <p className="truncate text-[11.5px] text-slate-500">{isCompleted ? 'Tap to expand' : location && !isCompleted ? location.name : 'Tap to choose'}</p>
                 </div>
-                <p className="text-xs text-slate-500">Calculating crater, fireball, shockwave…</p>
-              </div>
+                <ChevronUp className="h-5 w-5 shrink-0 text-slate-500" />
+              </button>
+            )}
+
+            {/* The button bar — never hidden */}
+            <div className="shrink-0 px-4 pt-2.5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
+              {BigButton}
             </div>
-          )}
-
-          {/* ═══ BOTTOM SHEET (vaul) ═══ */}
-          <Drawer.Root
-            snapPoints={[0.16, 0.55, 0.92]}
-            activeSnapPoint={snapPoint}
-            setActiveSnapPoint={setSnapPoint}
-            modal={false}
-            open={true}
-            onOpenChange={() => {}}
-            dismissible={false}
-            noBodyStyles
-          >
-            <Drawer.Portal>
-              <Drawer.Content
-                className="fixed bottom-0 left-0 right-0 z-40 flex flex-col outline-none"
-                style={{
-                  height: '100dvh',
-                  background: 'rgba(7, 10, 22, 0.96)',
-                  backdropFilter: 'blur(24px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-                  borderTop: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '20px 20px 0 0',
-                  boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
-                }}
-              >
-                {/* Drag handle */}
-                <div className="flex justify-center pt-3 pb-2 shrink-0">
-                  <div className="h-1 w-10 rounded-full bg-white/20" />
-                </div>
-
-                {/* ── Tab row (always visible) ── */}
-                <div
-                  className="shrink-0 flex items-center gap-1 px-3 pb-3 border-b border-white/[0.07]"
-                  style={{ touchAction: 'none' }}
-                >
-                  {/* Step tabs */}
-                  <div className="flex items-center gap-1 flex-1">
-                    {([
-                      { id: 'location' as MobileStep, icon: <MapPin className="h-4 w-4" />, label: 'Target', done: Boolean(location), disabled: false as boolean },
-                      { id: 'asteroid' as MobileStep, icon: <Rocket className="h-4 w-4" />, label: 'Rock', done: Boolean(asteroid), disabled: false as boolean },
-                      { id: 'results' as MobileStep, icon: <BarChart3 className="h-4 w-4" />, label: 'Results', done: isCompleted, disabled: !isCompleted as boolean },
-                    ]).map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => {
-                          if (tab.disabled) return;
-                          setMobileStep(tab.id);
-                          setSnapPoint(0.55);
-                        }}
-                        disabled={tab.disabled}
-                        className={`press-feedback flex flex-col items-center justify-center gap-0.5 flex-1 rounded-xl py-2 transition-all min-h-[52px] ${
-                          mobileStep === tab.id
-                            ? 'bg-white/8 border border-white/10 text-white'
-                            : tab.disabled
-                            ? 'text-slate-700 cursor-not-allowed'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        <span className={`${tab.done ? 'text-violet-300' : mobileStep === tab.id ? 'text-cyan-300' : ''}`}>
-                          {tab.done ? '✓' : tab.icon}
-                        </span>
-                        <span className="text-[10px] font-medium">{tab.label}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Simulate / Reset button */}
-                  <button
-                    type="button"
-                    onClick={isCompleted ? handleReset : handleSimulate}
-                    disabled={!isCompleted && !canSimulate}
-                    className={`press-feedback flex flex-col items-center justify-center gap-0.5 rounded-xl px-4 min-h-[52px] min-w-[72px] text-[11px] font-bold font-orbitron tracking-wide transition-all ${
-                      isCompleted
-                        ? 'border border-white/10 bg-white/6 text-slate-300'
-                        : canSimulate
-                        ? 'impact-btn-active text-white'
-                        : 'bg-white/4 text-slate-600 cursor-not-allowed border border-white/5'
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <><RotateCcw className="h-4 w-4 mb-0.5" /><span>Reset</span></>
-                    ) : (
-                      <><Play className="h-4 w-4 mb-0.5" /><span>{canSimulate ? 'GO!' : 'GO!'}</span></>
-                    )}
-                  </button>
-                </div>
-
-                {/* ── Scrollable content area ── */}
-                <div
-                  className="sheet-scroll flex-1 overflow-y-auto px-4 py-4"
-                  style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
-                >
-                  {mobileStep === 'location' && LocationSection}
-                  {mobileStep === 'asteroid' && AsteroidSection}
-                  {mobileStep === 'results' && ResultsSection}
-                </div>
-              </Drawer.Content>
-            </Drawer.Portal>
-          </Drawer.Root>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── DESKTOP LAYOUT ───────────────────────────────────────────────────────────
+  // ── DESKTOP ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#07080f]">
-      {/* ═══ HEADER ═══ */}
-      <header className="glass relative z-40 flex h-12 shrink-0 items-center border-b border-white/[0.07] px-4 gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-500/25 bg-gradient-to-br from-red-600/20 to-orange-600/10">
-            <span className="text-sm">☄️</span>
-          </div>
-          <p className="font-orbitron text-[11px] font-bold tracking-[0.12em] text-white">ASTEROID MAP</p>
-        </div>
-        <span className="text-[10px] text-slate-600 hidden sm:block">What happens if a space rock hits your city?</span>
-        <div className="ml-auto flex items-center gap-2">
-          {isCompleted && (
-            <>
-              <button type="button" onClick={handleShare}
-                className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-300 hover:bg-violet-500/20 transition">
-                {copied ? <Check className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
-                {copied ? 'Copied!' : 'Share'}
-              </button>
-              <button type="button" onClick={handleReset}
-                className="flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-2.5 py-1 text-[10px] text-slate-400 hover:text-white transition">
-                <RotateCcw className="h-3 w-3" /> New
-              </button>
-            </>
-          )}
-        </div>
+      <header className="z-40 flex h-14 shrink-0 items-center gap-4 border-b border-white/[0.07] px-5">
+        {Logo}
+        <span className="ml-1 hidden text-[12.5px] text-slate-500 lg:block">What happens if an asteroid hits your city? Find out 👇</span>
+        {isCompleted && (
+          <button type="button" onClick={handleShare}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-slate-200 hover:bg-white/[0.08]">
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
+            {copied ? 'Copied!' : 'Share'}
+          </button>
+        )}
       </header>
 
-      {/* ═══ MAIN ═══ */}
       <div className="relative flex flex-1 overflow-hidden">
-
-        {/* ── SIDEBAR ── */}
-        <aside className="glass relative z-20 flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-white/[0.07]">
-          <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-5">
-
-            {/* ── 1. PICK A CITY ── */}
-            {LocationSection}
-
-            {/* ── 2. PICK AN ASTEROID ── */}
-            {AsteroidSection}
-
-            {/* ── SIMULATE BUTTON ── */}
-            <button type="button" onClick={isCompleted ? handleReset : handleSimulate}
-              disabled={!isCompleted && !canSimulate}
-              className={`w-full flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-[13px] font-bold font-orbitron tracking-[0.08em] transition-all ${
-                isCompleted
-                  ? 'border border-white/10 bg-white/6 text-slate-300 hover:bg-white/10'
-                  : canSimulate
-                  ? 'impact-btn-active text-white'
-                  : 'bg-white/4 text-slate-600 cursor-not-allowed border border-white/5'
-              }`}>
-              {isCompleted ? (
-                <><RotateCcw className="h-4 w-4" /> Try another one</>
-              ) : (
-                <><Play className="h-4 w-4" /> {canSimulate ? 'SIMULATE IMPACT' : 'Pick a city & asteroid first'}</>
-              )}
-            </button>
-
-            {/* ── RESULTS ── */}
-            {isCompleted && (
-              <section className="animate-fadeInUp border-t border-white/6 pt-4">
-                {ResultsSection}
-              </section>
-            )}
+        <aside className="z-20 flex w-[380px] shrink-0 flex-col border-r border-white/[0.07] bg-[#080b14]">
+          <div ref={scrollRef} className="custom-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
+            {isCompleted ? ResultsContent : (<>{LocationCard}{AsteroidCard}</>)}
+          </div>
+          {/* Pinned action bar — never scrolls away */}
+          <div className="shrink-0 border-t border-white/[0.08] bg-[#080b14] p-4">
+            {BigButton}
           </div>
         </aside>
 
-        {/* ── MAP ── */}
         <main className="relative flex-1 overflow-hidden">
           <DirectoryMap />
-
-          {/* Running overlay */}
-          {simulationStatus === 'running' && (
-            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-[#07080f]/65 backdrop-blur-sm">
-              <div className="glass rounded-2xl px-10 py-8 text-center animate-impact-flash">
-                <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
-                  <div className="animate-target-ring absolute inset-0 rounded-full border-2 border-red-500/60" />
-                  <div className="animate-target-ring absolute inset-0 rounded-full border border-orange-400/40" style={{ animationDelay: '0.6s' }} />
-                  <div className="relative h-6 w-6 rounded-full bg-red-600 shadow-[0_0_20px_rgba(220,38,38,0.9)]">
-                    <div className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
-                  </div>
-                </div>
-                <h2 className="font-orbitron text-lg font-black tracking-[0.15em] text-red-300">INCOMING!</h2>
-                <div className="my-2 flex justify-center gap-1">
-                  <div className="dot-1 h-1.5 w-1.5 rounded-full bg-orange-400" />
-                  <div className="dot-2 h-1.5 w-1.5 rounded-full bg-orange-400" />
-                  <div className="dot-3 h-1.5 w-1.5 rounded-full bg-orange-400" />
-                </div>
-                <p className="text-xs text-slate-500">Calculating crater, fireball, shockwave…</p>
-              </div>
-            </div>
-          )}
+          {RunningOverlay}
         </main>
       </div>
     </div>

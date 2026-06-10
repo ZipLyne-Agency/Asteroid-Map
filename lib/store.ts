@@ -13,6 +13,8 @@ export interface Asteroid {
   diameter: number; // meters
   velocity: number; // km/s
   composition: 'ice' | 'porous_rock' | 'dense_rock' | 'iron';
+  emoji?: string;      // friendly icon for the card
+  blurb?: string;      // one plain-English line: what it is / why it's famous
   date?: string;
   dateIso?: string;
   relativeTime?: string;
