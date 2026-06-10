@@ -115,19 +115,32 @@ export function hydrateFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const store = useAppStore.getState();
 
+  const VALID_COMPOSITIONS: Asteroid['composition'][] = ['ice', 'porous_rock', 'dense_rock', 'iron'];
+
   const astId = params.get('ast');
   if (astId) {
-    const name = params.get('name') ?? astId;
-    const diameter = Number(params.get('d')) || 100;
-    const velocity = Number(params.get('v')) || 20;
-    const comp = (params.get('comp') ?? 'dense_rock') as Asteroid['composition'];
+    const name = params.get('name')?.trim() || astId;
+    // Clamp shared-link params to physically sensible ranges instead of
+    // silently simulating garbage from a mangled URL.
+    const diameter = clampNumber(params.get('d'), 1, 1_000_000, 100);
+    const velocity = clampNumber(params.get('v'), 11, 72, 20);
+    const compParam = params.get('comp') ?? 'dense_rock';
+    const comp = (VALID_COMPOSITIONS as string[]).includes(compParam)
+      ? (compParam as Asteroid['composition'])
+      : 'dense_rock';
     store.setAsteroid({ id: astId, name, diameter, velocity, composition: comp, source: 'known' });
   }
 
-  const lat = params.get('lat');
-  const lng = params.get('lng');
-  if (lat && lng) {
-    const locName = params.get('loc') ?? `${lat}, ${lng}`;
-    store.setLocation({ lat: Number(lat), lng: Number(lng), name: locName });
+  const lat = Number(params.get('lat'));
+  const lng = Number(params.get('lng'));
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    const locName = params.get('loc')?.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    store.setLocation({ lat, lng, name: locName });
   }
+}
+
+function clampNumber(raw: string | null, min: number, max: number, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
 }

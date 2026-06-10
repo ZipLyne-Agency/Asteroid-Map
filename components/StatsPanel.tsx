@@ -63,7 +63,9 @@ function useCountUp(target: number, format: (n: number) => string = formatBig): 
   useEffect(() => {
     startRef.current = null;
     const duration = 1400;
+    let cancelled = false;
     const tick = (ts: number) => {
+      if (cancelled) return;
       if (startRef.current === null) startRef.current = ts;
       const progress = Math.min((ts - startRef.current) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
@@ -71,7 +73,10 @@ function useCountUp(target: number, format: (n: number) => string = formatBig): 
       if (progress < 1) frameRef.current = requestAnimationFrame(tick);
     };
     frameRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameRef.current);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frameRef.current);
+    };
   }, [target]);
 
   return format(val);

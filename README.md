@@ -71,19 +71,15 @@ cd asteroid-map
 # 2. Install dependencies
 npm install
 
-# 3. Set up environment variables
+# 3. (Optional) Set up environment variables
 cp .env.example .env.local
-# Then edit .env.local and add your GEMINI_API_KEY
 ```
 
 ### Environment Variables
 
-Create a `.env.local` file in the project root:
+All optional — the app runs with none set. Create a `.env.local` in the project root to override:
 
 ```env
-# Required — get one free at https://aistudio.google.com/app/apikey
-GEMINI_API_KEY=your_gemini_api_key_here
-
 # Optional — identifies your instance to the OSM Nominatim geocoding service
 # Replace with your contact info as required by the Nominatim usage policy
 NOMINATIM_USER_AGENT=AsteroidMap/1.0 (your@email.com)

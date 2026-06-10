@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, clientIp } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const SearchResultSchema = z.array(
@@ -11,9 +12,13 @@ const SearchResultSchema = z.array(
 );
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const NOMINATIM_UA = process.env.NOMINATIM_USER_AGENT ?? 'AsteroidMap/1.0 (contact required)';
+const NOMINATIM_UA = process.env.NOMINATIM_USER_AGENT ?? 'AsteroidMap/1.0 (+https://asteroidmap.com; go@ziplyne.agency)';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  if (!checkRateLimit(clientIp(request.headers))) {
+    return NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
+  }
+
   const query = request.nextUrl.searchParams.get('q')?.trim() ?? '';
   const limit = Math.min(8, Math.max(1, Number.parseInt(request.nextUrl.searchParams.get('limit') ?? '5', 10) || 5));
 
@@ -34,6 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'User-Agent': NOMINATIM_UA,
       },
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

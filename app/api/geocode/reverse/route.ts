@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, clientIp } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const ReverseSchema = z.object({
@@ -6,9 +7,13 @@ const ReverseSchema = z.object({
 });
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse';
-const NOMINATIM_UA = process.env.NOMINATIM_USER_AGENT ?? 'AsteroidMap/1.0 (contact required)';
+const NOMINATIM_UA = process.env.NOMINATIM_USER_AGENT ?? 'AsteroidMap/1.0 (+https://asteroidmap.com; go@ziplyne.agency)';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  if (!checkRateLimit(clientIp(request.headers))) {
+    return NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
+  }
+
   const latValue = request.nextUrl.searchParams.get('lat');
   const lngValue = request.nextUrl.searchParams.get('lng');
 
@@ -32,6 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'User-Agent': NOMINATIM_UA,
       },
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

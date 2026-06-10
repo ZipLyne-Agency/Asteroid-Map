@@ -127,6 +127,8 @@ async function fetchCad(
   const response = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },
     next: { revalidate: 300 },
+    // JPL CAD can stall; never hang the route (and the UI spinner) on it.
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!response.ok) {
