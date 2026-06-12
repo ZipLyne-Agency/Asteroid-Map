@@ -121,12 +121,29 @@ export function populationZonesFromCumulative(
   radii: PopulationRadiiKm,
   cumulativePopulation: (radiusKm: number) => number,
 ): PopulationZoneTotals {
-  const populationAt = (radiusKm: number) => Math.max(0, cumulativePopulation(radiusKm));
-  const craterPopulation = populationAt(radii.crater);
   const fireballInner = radii.crater;
   const blastInner = Math.max(radii.crater, radii.fireball);
   const thermalInner = Math.max(radii.crater, radii.fireball, radii.blast);
   const severeOuter = Math.max(radii.crater, radii.fireball, radii.blast, radii.thermal);
+  const queryRadii = Array.from(new Set([
+    radii.crater,
+    radii.fireball,
+    fireballInner,
+    radii.blast,
+    blastInner,
+    radii.thermal,
+    thermalInner,
+    radii.minorBlast,
+    severeOuter,
+  ].filter((radius) => Number.isFinite(radius) && radius > 0))).sort((a, b) => a - b);
+  const monotonicTotals = new Map<number, number>();
+  let runningMax = 0;
+  for (const radius of queryRadii) {
+    runningMax = Math.max(runningMax, Math.max(0, cumulativePopulation(radius)));
+    monotonicTotals.set(radius, runningMax);
+  }
+  const populationAt = (radiusKm: number) => radiusKm <= 0 ? 0 : monotonicTotals.get(radiusKm) ?? Math.max(0, cumulativePopulation(radiusKm));
+  const craterPopulation = populationAt(radii.crater);
 
   return {
     crater: craterPopulation,

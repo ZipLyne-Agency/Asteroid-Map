@@ -1,5 +1,7 @@
 import type { CasualtyZonePopulations } from './physics';
 
+const MAX_SHARED_ZONE_POPULATION = 8_200_000_000;
+
 export interface SharedZonePopulationEstimate {
   central: CasualtyZonePopulations;
   low: CasualtyZonePopulations;
@@ -13,7 +15,13 @@ function zoneToValues(zone: CasualtyZonePopulations): number[] {
 }
 
 function valuesToZone(values: number[]): CasualtyZonePopulations | null {
-  if (values.length !== ZONE_KEYS.length || values.some((value) => !Number.isFinite(value) || value < 0)) return null;
+  if (
+    values.length !== ZONE_KEYS.length ||
+    values.some((value) => !Number.isFinite(value) || value < 0 || value > MAX_SHARED_ZONE_POPULATION) ||
+    values.reduce((sum, value) => sum + value, 0) > MAX_SHARED_ZONE_POPULATION
+  ) {
+    return null;
+  }
 
   return {
     crater: values[0],

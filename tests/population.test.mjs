@@ -69,6 +69,30 @@ test('population zone totals subtract cumulative circles into non-overlapping ri
   assert.equal(zones.minorBlast, 100);
 });
 
+test('population zone totals enforce monotonic cumulative raster totals', () => {
+  const zones = populationZonesFromCumulative({
+    crater: 1,
+    fireball: 2,
+    blast: 3,
+    thermal: 4,
+    minorBlast: 5,
+  }, (radius) => ({
+    1: 1000,
+    2: 900,
+    3: 1100,
+    4: 1050,
+    5: 1200,
+  })[radius] ?? 0);
+
+  assert.deepEqual(zones, {
+    crater: 1000,
+    fireball: 0,
+    blast: 100,
+    thermal: 0,
+    minorBlast: 100,
+  });
+});
+
 test('population radii scale uniformly for uncertainty envelopes', () => {
   const scaled = scalePopulationRadii({
     crater: 1,
