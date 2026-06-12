@@ -12,7 +12,7 @@ export const SITE_NAME = 'Asteroid Impact Simulator';
 
 /** Meta description — ~155 chars, keyword + CTA */
 export const SITE_DESCRIPTION =
-  'What happens if an asteroid hits Earth? Pick a city, choose a space rock, and watch the crater, blast wave & fireball appear on the map. Free & fun to explore!';
+  'Explore first-order asteroid impact effects on a map: airburst or crater, blast, thermal zones, and broad exposure ranges. Free educational simulator.';
 
 export const SITE_KEYWORDS = [
   'asteroid impact simulator',

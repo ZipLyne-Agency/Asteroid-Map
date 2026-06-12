@@ -4,17 +4,17 @@ const FAQ = [
   {
     question: 'What is the Asteroid Impact Simulator?',
     answer:
-      'A free tool that lets you pick any place on Earth, choose a real or famous asteroid, and see what would happen if it hit — the crater, the fireball, the shockwave, and more, all shown on a real map.',
+      'A free educational tool that lets you pick any place on Earth, choose a real or famous asteroid, and see first-order modeled effects such as airburst or crater, fireball, shockwave, and thermal zones on a map.',
   },
   {
     question: 'Is this scientifically accurate?',
     answer:
-      'Yes! The math is based on real published science (Collins et al. 2005). But these are estimates for learning and fun — not emergency warnings.',
+      'It uses published first-order impact-effect scaling, including Collins et al. 2005, but results are educational estimates with large uncertainty — not emergency forecasts.',
   },
   {
     question: 'Does it use real asteroid data?',
     answer:
-      'It includes famous asteroids like the one that killed the dinosaurs, plus live data from NASA about real asteroids flying near Earth right now.',
+      'It includes famous asteroids and live NASA/JPL close-approach records. Those records are flybys, not predicted impacts, and some object sizes are estimates.',
   },
   {
     question: 'Is the simulator free?',
@@ -24,7 +24,7 @@ const FAQ = [
   {
     question: 'What asteroid killed the dinosaurs?',
     answer:
-      'The Chicxulub impactor — a 12 km (7.5 mile) wide space rock that hit Mexico 66 million years ago. You can simulate it yourself on asteroidmap.com!',
+      'The Chicxulub impactor — a roughly 10-12 km wide space rock associated with the impact near Mexico 66 million years ago.',
   },
 ] as const;
 
@@ -72,9 +72,9 @@ export default function JsonLd() {
         url,
         author: { '@id': `${url}/#organization` },
         featureList: [
-          'Interactive world map with impact rings (crater, fireball, blast, thermal)',
-          'Asteroid parameters: diameter, velocity, composition',
-          'Energy, seismic magnitude, and rough casualty estimates by population density',
+          'Interactive world map with impact rings (airburst or crater, fireball, blast, window damage, thermal)',
+          'Curated and NASA/JPL asteroid inputs with diameter, velocity, composition, and target-material assumptions',
+          'Energy, seismic energy equivalent, and uncertainty-expanded uniform-density population-exposure ranges',
         ],
       },
       {

@@ -136,7 +136,7 @@ export async function createBrandOgImage(): Promise<ImageResponse> {
               maxWidth: 560,
             }}
           >
-            Pick a city. Drop an asteroid. See the crater, blast wave & fireball on a real map.
+            Pick a place. Drop an asteroid. See modeled impact zones on a real map.
           </span>
         </div>
 

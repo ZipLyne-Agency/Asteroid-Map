@@ -74,6 +74,10 @@ function toGeoJsonPolygon(radiusM: number, lat: number, lng: number, scale: numb
   return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [getGeodesicPolygon(lat, lng, radiusM * scale)] } };
 }
 
+function toZonePolygon(radiusM: number, lat: number, lng: number): Feature<Polygon> | null {
+  return radiusM > 0 ? toGeoJsonPolygon(radiusM, lat, lng, 1) : null;
+}
+
 /** Compute a point at bearing (degrees) and distance from center (for zone labels) */
 function offsetPoint(lat: number, lng: number, bearingDeg: number, distM: number): [number, number] {
   const R = 6371e3;
@@ -112,6 +116,7 @@ export default function DirectoryMap() {
   const mapRef = useRef<MapRef>(null);
   const location = useAppStore((state) => state.location);
   const results = useAppStore((state) => state.results);
+  const targetMaterial = useAppStore((state) => state.targetMaterial);
   const simulationStatus = useAppStore((state) => state.simulationStatus);
   const setLocation = useAppStore((state) => state.setLocation);
   const [mapReady, setMapReady] = useState(false);
@@ -168,16 +173,22 @@ export default function DirectoryMap() {
   const zoneScale = Math.max(0, simulationStatus === 'running' ? animProg : simulationStatus === 'completed' ? 1 : 0);
 
   // ── Impact zones ────────────────────────────────────────────────────────────
-  const craterZone   = useMemo(() => location && results ? toGeoJsonPolygon(results.craterDiameter / 2, location.lat, location.lng, 1) : null, [location, results]);
-  const fireballZone = useMemo(() => location && results ? toGeoJsonPolygon(results.fireballRadius, location.lat, location.lng, 1) : null, [location, results]);
-  const blastZone    = useMemo(() => location && results ? toGeoJsonPolygon(results.blastRadius, location.lat, location.lng, 1) : null, [location, results]);
-  const thermalZone  = useMemo(() => location && results ? toGeoJsonPolygon(results.thermalRadius, location.lat, location.lng, 1) : null, [location, results]);
+  const craterZone   = useMemo(() => location && results ? toZonePolygon(results.craterDiameter / 2, location.lat, location.lng) : null, [location, results]);
+  const fireballZone = useMemo(() => location && results ? toZonePolygon(results.fireballRadius, location.lat, location.lng) : null, [location, results]);
+  const blastZone    = useMemo(() => location && results ? toZonePolygon(results.blastRadius, location.lat, location.lng) : null, [location, results]);
+  const minorBlastZone = useMemo(() => location && results ? toZonePolygon(results.minorBlastRadius, location.lat, location.lng) : null, [location, results]);
+  const thermalZone  = useMemo(() => location && results ? toZonePolygon(results.thermalRadius, location.lat, location.lng) : null, [location, results]);
+  const outerZone = useMemo(() => {
+    if (!location || !results) return null;
+    const radius = Math.max(results.craterDiameter / 2, results.fireballRadius, results.blastRadius, results.minorBlastRadius, results.thermalRadius);
+    return radius > 0 ? toGeoJsonPolygon(radius, location.lat, location.lng, 1) : null;
+  }, [location, results]);
 
-  // Fit map to thermal zone when simulation completes
+  // Fit map to the outermost modeled zone when simulation completes
   useEffect(() => {
-    if (!mapRef.current || !mapReady || !thermalZone || simulationStatus === 'idle') return;
-    try { mapRef.current.fitBounds(getBoundsFromPolygon(thermalZone), { padding: 60, maxZoom: 12, duration: 900 }); } catch {}
-  }, [mapReady, simulationStatus, thermalZone]);
+    if (!mapRef.current || !mapReady || !outerZone || simulationStatus === 'idle') return;
+    try { mapRef.current.fitBounds(getBoundsFromPolygon(outerZone), { padding: 60, maxZoom: 12, duration: 900 }); } catch {}
+  }, [mapReady, simulationStatus, outerZone]);
 
   // ── Zone label positions (placed inside each annular ring) ──────────────────
   const zoneLabels = useMemo(() => {
@@ -187,15 +198,17 @@ export default function DirectoryMap() {
     const cr = results.craterDiameter / 2;
     const fr = results.fireballRadius;
     const br = results.blastRadius;
+    const mr = results.minorBlastRadius;
     const tr = results.thermalRadius;
 
     const labels = [
       // Crater: centered (0 inner radius)
-      { id: 'crater',   text: '🕳️ Crater',     color: '#FF5533', pos: offsetPoint(lat, lng, 0,   cr * 0.5) },
+      { id: 'crater',   text: targetMaterial === 'water' ? '🌊 Water cavity' : '🕳️ Crater', color: '#FF5533', pos: offsetPoint(lat, lng, 0,   cr * 0.5) },
       // Fireball: in the ring between crater edge and fireball edge
       { id: 'fireball', text: '🔥 Fireball',   color: '#FF7700', pos: offsetPoint(lat, lng, 45,  (cr + fr) / 2) },
       // Blast: in the ring between fireball and blast
       { id: 'blast',    text: '💨 Shockwave',  color: '#FFAA00', pos: offsetPoint(lat, lng, 135, (fr + br) / 2) },
+      { id: 'minor-blast', text: '🪟 Windows', color: '#8BD3FF', pos: offsetPoint(lat, lng, 180, (Math.max(br, tr) + mr) / 2) },
       // Thermal: in the ring between blast and thermal
       { id: 'thermal',  text: '🌡️ Heat blast', color: '#FFD600', pos: offsetPoint(lat, lng, 225, (br + tr) / 2) },
     ];
@@ -205,9 +218,10 @@ export default function DirectoryMap() {
       if (i === 0) return cr > 200;
       if (i === 1) return fr - cr > 500;
       if (i === 2) return br - fr > 500;
+      if (i === 3) return mr - Math.max(br, tr) > 500;
       return tr - br > 500;
     });
-  }, [location, results, zoneScale]);
+  }, [location, results, targetMaterial, zoneScale]);
 
   const handleMove = () => {
     const b = mapRef.current?.getBounds();
@@ -241,7 +255,10 @@ export default function DirectoryMap() {
     void reverseGeocode(lat, lng).then((name) => setLocation({ lat, lng, name: name ?? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` }));
   };
 
-  const zonesVisible = zoneScale >= 0.8 && results;
+  const zonesVisible =
+    zoneScale >= 0.8 &&
+    results &&
+    Math.max(results.craterDiameter / 2, results.fireballRadius, results.blastRadius, results.minorBlastRadius, results.thermalRadius) > 0;
 
   return (
     <div className="relative h-full w-full bg-[#07080f]">
@@ -292,6 +309,12 @@ export default function DirectoryMap() {
           <Source id="thermal-zone" type="geojson" data={thermalZone}>
             <Layer id="thermal-zone-fill" type="fill" paint={{ 'fill-color': '#FFD600', 'fill-opacity': 0.10 * zoneScale }} />
             <Layer id="thermal-zone-line" type="line" paint={{ 'line-color': '#FFD600', 'line-width': 1.5, 'line-blur': 2, 'line-opacity': 0.75 * zoneScale }} />
+          </Source>
+        )}
+        {minorBlastZone && (
+          <Source id="minor-blast-zone" type="geojson" data={minorBlastZone}>
+            <Layer id="minor-blast-zone-fill" type="fill" paint={{ 'fill-color': '#38BDF8', 'fill-opacity': 0.08 * zoneScale }} />
+            <Layer id="minor-blast-zone-line" type="line" paint={{ 'line-color': '#8BD3FF', 'line-width': 1.25, 'line-blur': 1.5, 'line-opacity': 0.70 * zoneScale }} />
           </Source>
         )}
         {blastZone && (
@@ -352,11 +375,12 @@ export default function DirectoryMap() {
           <p className="mb-2 text-[12px] font-semibold text-white">Damage zones</p>
           <div className="space-y-1.5">
             {[
-              { color: '#FF1A00', label: '🕳️ Crater',     r: results.craterDiameter / 2 },
+              { color: '#FF1A00', label: targetMaterial === 'water' ? '🌊 Water cavity' : '🕳️ Crater', r: results.craterDiameter / 2 },
               { color: '#FF4400', label: '🔥 Fireball',    r: results.fireballRadius },
               { color: '#FF8800', label: '💨 Shockwave',   r: results.blastRadius },
+              { color: '#8BD3FF', label: '🪟 Windows',     r: results.minorBlastRadius },
               { color: '#FFD600', label: '🌡️ Heat blast',  r: results.thermalRadius },
-            ].map(({ color, label, r }) => (
+            ].filter(({ r }) => r > 0).map(({ color, label, r }) => (
               <div key={label} className="flex items-center gap-2">
                 <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}80` }} />
                 <span className="text-[11px] text-slate-300 flex-1">{label}</span>
@@ -365,7 +389,7 @@ export default function DirectoryMap() {
             ))}
           </div>
           <p className="mt-2 text-[9px] text-slate-600 leading-relaxed">
-            Drag the 🎯 to move where it hits
+            Rings show central screening radii; effects are roughly ±{results.uncertaintyFactor}x. Drag the 🎯 to move where it hits.
           </p>
         </div>
       )}
