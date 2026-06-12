@@ -368,21 +368,30 @@ function finalizeCasualtyEstimate(
   const centralTotals = normalizeScenario(central);
   const lowTotals = normalizeScenario(low);
   const highTotals = normalizeScenario(high);
+  const exposureScenarios = [centralTotals.exposed, lowTotals.exposed, highTotals.exposed];
+  const deathScenarios = [centralTotals.deaths, lowTotals.deaths, highTotals.deaths];
+  const injuryScenarios = [centralTotals.injuries, lowTotals.injuries, highTotals.injuries];
   const survivorScenarios = [centralTotals.survivors, lowTotals.survivors, highTotals.survivors];
+  const totalExposedLow = Math.min(...exposureScenarios);
+  const totalExposedHigh = Math.max(...exposureScenarios);
+  const totalDeathsLow = Math.min(...deathScenarios);
+  const totalDeathsHigh = Math.max(...deathScenarios);
+  const totalInjuriesLow = Math.min(...injuryScenarios);
+  const totalInjuriesHigh = Math.max(...injuryScenarios);
   const totalSurvivorsLow = Math.min(...survivorScenarios);
   const totalSurvivorsHigh = Math.max(...survivorScenarios);
 
   return {
     totalExposed: Math.round(centralTotals.exposed),
-    totalExposedLow: Math.round(lowTotals.exposed),
-    totalExposedHigh: Math.round(highTotals.exposed),
+    totalExposedLow: Math.round(totalExposedLow),
+    totalExposedHigh: Math.round(totalExposedHigh),
     totalDeaths:   Math.round(centralTotals.deaths),
     totalInjuries: Math.round(centralTotals.injuries),
     totalSurvivors: Math.round(centralTotals.survivors),
-    totalDeathsLow: Math.round(lowTotals.deaths),
-    totalDeathsHigh: Math.round(highTotals.deaths),
-    totalInjuriesLow: Math.round(lowTotals.injuries),
-    totalInjuriesHigh: Math.round(highTotals.injuries),
+    totalDeathsLow: Math.round(totalDeathsLow),
+    totalDeathsHigh: Math.round(totalDeathsHigh),
+    totalInjuriesLow: Math.round(totalInjuriesLow),
+    totalInjuriesHigh: Math.round(totalInjuriesHigh),
     totalSurvivorsLow: Math.round(totalSurvivorsLow),
     totalSurvivorsHigh: Math.round(totalSurvivorsHigh),
     craterDeaths:  Math.round(Math.min(central.craterDeaths, WORLD_POPULATION)),

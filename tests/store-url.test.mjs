@@ -121,6 +121,16 @@ test('shared URLs preserve estimated CAD diameter uncertainty metadata', () => {
   assert.match(asteroid?.inputUncertainty ?? '', /assumed albedo range/);
 });
 
+test('shared URLs normalize inverted diameter uncertainty bounds', () => {
+  resetStore();
+  installWindow('?ast=cad-test&name=CAD%20Test&d=120&v=18&comp=dense_rock&src=jpl-cad&dmin=210&dmax=90');
+  hydrateFromUrl();
+
+  const asteroid = useAppStore.getState().asteroid;
+  assert.equal(asteroid?.diameterMin, 90);
+  assert.equal(asteroid?.diameterMax, 210);
+});
+
 test('shared URLs preserve CAD hyperbolic-excess velocity basis', () => {
   resetStore();
   const windowState = installWindow('');

@@ -348,3 +348,21 @@ test('zone-population casualty path supports non-uniform raster-derived exposure
   assert.equal(denseCraterSparseWindow.totalExposed, 100_000);
   assert.equal(denseCraterSparseWindow.totalSurvivors, 0);
 });
+
+test('casualty ranges stay ordered when zone-population uncertainty inputs are non-monotonic', () => {
+  const estimate = estimateCasualtiesFromZonePopulations(
+    { crater: 1000, fireball: 0, blast: 0, thermal: 0, minorBlast: 0 },
+    { crater: 5000, fireball: 0, blast: 0, thermal: 0, minorBlast: 0 },
+    { crater: 100, fireball: 0, blast: 0, thermal: 0, minorBlast: 0 },
+  );
+
+  assert.equal(estimate.totalDeaths, 1000);
+  assert.equal(estimate.totalExposedLow, 100);
+  assert.equal(estimate.totalExposedHigh, 5000);
+  assert.equal(estimate.totalDeathsLow, 100);
+  assert.equal(estimate.totalDeathsHigh, 5000);
+  assert.ok(estimate.totalExposedLow <= estimate.totalExposedHigh);
+  assert.ok(estimate.totalDeathsLow <= estimate.totalDeathsHigh);
+  assert.ok(estimate.totalInjuriesLow <= estimate.totalInjuriesHigh);
+  assert.ok(estimate.totalSurvivorsLow <= estimate.totalSurvivorsHigh);
+});

@@ -216,8 +216,10 @@ export function hydrateFromUrl() {
         ? velocityBasisParam
         : 'entry';
     const diameterEstimated = params.get('de') === '1';
-    const diameterMin = clampOptionalNumber(params.get('dmin'), 1, 50_000);
-    const diameterMax = clampOptionalNumber(params.get('dmax'), 1, 50_000);
+    const [diameterMin, diameterMax] = normalizeOptionalRange(
+      clampOptionalNumber(params.get('dmin'), 1, 50_000),
+      clampOptionalNumber(params.get('dmax'), 1, 50_000),
+    );
     const diameterSigma = clampOptionalNumber(params.get('dsig'), 0, 50_000);
     const compositionAssumed = params.get('cassume') === '1';
     const sourceName = params.get('sn')?.trim();
@@ -280,4 +282,9 @@ function clampOptionalNumber(raw: string | null, min: number, max: number): numb
   const n = Number(raw);
   if (!Number.isFinite(n)) return undefined;
   return Math.min(max, Math.max(min, n));
+}
+
+function normalizeOptionalRange(min: number | undefined, max: number | undefined): [number | undefined, number | undefined] {
+  if (min === undefined || max === undefined) return [min, max];
+  return min <= max ? [min, max] : [max, min];
 }
