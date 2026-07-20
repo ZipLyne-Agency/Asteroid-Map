@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, clientIp } from '@/lib/rate-limit';
+import { z } from 'zod';
+
+const SearchResultSchema = z.array(
+  z.object({
+    place_id: z.union([z.string(), z.number()]),
+    display_name: z.string(),
+    lat: z.string(),
+    lon: z.string(),
+  }),
+);
+
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_UA = process.env.NOMINATIM_USER_AGENT ?? 'AsteroidMap/1.0 (+https://asteroidmap.com; go@ziplyne.agency)';
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  if (!checkRateLimit(clientIp(request.headers))) {
+    return NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
+  }
+
+  const query = request.nextUrl.searchParams.get('q')?.trim() ?? '';
+  const limit = Math.min(8, Math.max(1, Number.parseInt(request.nextUrl.searchParams.get('limit') ?? '5', 10) || 5));
+
+  if (query.length > 200) {
+    return NextResponse.json({ error: 'Search query is too long.' }, { status: 400 });
+  }
+
+  if (query.length < 3) {
+    return NextResponse.json({ results: [] });
+  }
+
+  try {
+    const url = new URL(NOMINATIM_URL);
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('addressdetails', '1');
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': NOMINATIM_UA,
+      },
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      return NextResponse.json({ error: 'Geocoding request failed.' }, { status: 502 });
+    }
+
+    const raw: unknown = await response.json();
+    const parsed = SearchResultSchema.safeParse(raw);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Unexpected geocoding payload.' }, { status: 502 });
+    }
+
+    const results = parsed.data.flatMap((item) => {
+      const lat = Number.parseFloat(item.lat);
+      const lng = Number.parseFloat(item.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return [];
+      return [{ id: String(item.place_id), placeName: item.display_name, lat, lng }];
+    });
+
+    return NextResponse.json({ results });
+  } catch {
+    return NextResponse.json({ error: 'Unexpected server error while searching locations.' }, { status: 500 });
+  }
+}
