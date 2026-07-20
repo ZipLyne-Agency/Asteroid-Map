@@ -13,6 +13,7 @@ import {
   populationZonesFromCumulative,
   scalePopulationRadii,
 } from '@/lib/population';
+import { WORLDPOP_ROUTE_DEADLINE_MS, withDeadline } from '@/lib/worldpop';
 
 const WORLDPOP_STATS_URL = 'https://api.worldpop.org/v1/services/stats';
 const WORLDPOP_TASK_URL = 'https://api.worldpop.org/v1/tasks';
@@ -30,14 +31,14 @@ const WorldPopStatsSchema = z.object({
   }).optional(),
 });
 
-async function readWorldPopTask(taskid: string): Promise<number | null> {
+async function readWorldPopTask(taskid: string, signal: AbortSignal): Promise<number | null> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500 + attempt * 250));
 
     const response = await fetch(`${WORLDPOP_TASK_URL}/${encodeURIComponent(taskid)}`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(8_000)]),
     });
     if (!response.ok) return null;
 
@@ -49,7 +50,12 @@ async function readWorldPopTask(taskid: string): Promise<number | null> {
   return null;
 }
 
-async function fetchWorldPopTotal(lat: number, lng: number, radiusKm: number): Promise<number | null> {
+async function fetchWorldPopTotal(
+  lat: number,
+  lng: number,
+  radiusKm: number,
+  signal: AbortSignal,
+): Promise<number | null> {
   if (radiusKm <= 0) return 0;
 
   const geojson = JSON.stringify(geoJsonCircle(lat, lng, radiusKm));
@@ -62,7 +68,7 @@ async function fetchWorldPopTotal(lat: number, lng: number, radiusKm: number): P
   const response = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },
     cache: 'no-store',
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
   });
 
   if (!response.ok) return null;
@@ -70,7 +76,7 @@ async function fetchWorldPopTotal(lat: number, lng: number, radiusKm: number): P
   const parsed = WorldPopStatsSchema.safeParse(await response.json());
   if (!parsed.success || parsed.data.error) return null;
 
-  return parsed.data.data?.total_population ?? (parsed.data.taskid ? await readWorldPopTask(parsed.data.taskid) : null);
+  return parsed.data.data?.total_population ?? (parsed.data.taskid ? await readWorldPopTask(parsed.data.taskid, signal) : null);
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -119,10 +125,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ].filter((value) => value > 0).map((value) => clampPopulationRadiusKm(value))));
     const totals = new Map<number, number>();
 
-    await Promise.all(uniqueRadii.map(async (value) => {
-      const total = await fetchWorldPopTotal(lat, lng, value);
-      if (total !== null && Number.isFinite(total)) totals.set(value, Math.max(0, total));
-    }));
+    const routeController = new AbortController();
+    await withDeadline(
+      Promise.all(uniqueRadii.map(async (value) => {
+        const total = await fetchWorldPopTotal(lat, lng, value, routeController.signal);
+        if (total !== null && Number.isFinite(total)) totals.set(value, Math.max(0, total));
+      })),
+      WORLDPOP_ROUTE_DEADLINE_MS,
+      () => routeController.abort(),
+    );
 
     if (totals.size !== uniqueRadii.length) {
       return NextResponse.json({ error: 'WorldPop estimate is incomplete.' }, { status: 504 });

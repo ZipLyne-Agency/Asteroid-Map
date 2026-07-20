@@ -14,6 +14,18 @@ import {
   populationZonesFromCumulative,
   scalePopulationRadii,
 } from '../lib/population.ts';
+import { withDeadline } from '../lib/worldpop.ts';
+
+test('WorldPop work is rejected at the route deadline instead of hanging', async () => {
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    withDeadline(new Promise(() => {}), 25),
+    (error) => error instanceof DOMException && error.name === 'TimeoutError',
+  );
+
+  assert.ok(Date.now() - startedAt < 250);
+});
 
 test('population helper builds a closed GeoJSON circle', () => {
   const circle = geoJsonCircle(40.7128, -74.006, 10, 12);
