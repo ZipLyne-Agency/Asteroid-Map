@@ -47,7 +47,7 @@ test('energy and seismic report copy avoids exact-effect overclaims', () => {
   assert.match(pageSource, /Custom density/);
   assert.match(pageSource, /WorldPop, Kontur, or GPW/);
   assert.match(pageSource, /Use WorldPop footprint density/);
-  assert.match(pageSource, /mapped effect ring/);
+  assert.match(pageSource, /complete modeled footprint/);
   assert.match(pageSource, /allocated by effect ring/);
   assert.match(pageSource, /WorldPop population estimates for each effect ring/);
   assert.match(pageSource, /decodeZonePopulationEstimate/);
@@ -55,9 +55,7 @@ test('energy and seismic report copy avoids exact-effect overclaims', () => {
   assert.match(pageSource, /Modeled exposed population/);
   assert.match(pageSource, /Modeled uninjured survivors inside zones/);
   assert.match(worldPopRouteSource, /WorldPop estimate footprint is too large/);
-  assert.match(worldPopRouteSource, /WorldPop estimate is incomplete/);
-  assert.match(worldPopRouteSource, /totals\.size !== uniqueRadii\.length/);
-  assert.doesNotMatch(worldPopRouteSource, /totals\.get\(queryRadiusKm\) \?\? 0/);
+  assert.match(worldPopRouteSource, /WorldPop estimate is not ready/);
   assert.match(worldPopRouteSource, /populationRadiiExceedWorldPopLimit/);
   assert.doesNotMatch(pageSource, /asteroid\.diameterEstimated && !zonePopulationEstimate/);
   assert.doesNotMatch(pageSource, /The explosion was as powerful as/);
@@ -83,6 +81,8 @@ test('public proxy routes reject abusive inputs before upstream requests', () =>
   assert.match(worldPopRouteSource, /url\.searchParams\.set\('runasync', 'false'\)/);
   assert.match(worldPopRouteSource, /withDeadline/);
   assert.match(worldPopRouteSource, /AbortSignal\.any\(\[signal, AbortSignal\.timeout\(35_000\)\]\)/);
+  assert.match(worldPopRouteSource, /fetchWorldPopTotal\(lat, lng, radiusKm, routeController\.signal\)/);
+  assert.doesNotMatch(worldPopRouteSource, /Promise\.all\(uniqueRadii/);
   assert.match(worldPopRouteSource, /cache: 'no-store'/);
 });
 

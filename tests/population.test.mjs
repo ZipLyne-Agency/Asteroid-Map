@@ -44,6 +44,7 @@ test('population density derives from total population and footprint area', () =
   assert.ok(Math.abs(estimate.areaKm2 - circleAreaKm2(10)) < 0.001);
   assert.ok(estimate.densityPerKm2 > 999);
   assert.ok(estimate.densityPerKm2 < 1001);
+  assert.match(estimate.note, /footprint-average density uniformly/);
 });
 
 test('WorldPop lookup radii are clamped for service safety', () => {

@@ -6,11 +6,9 @@ import {
   MAX_WORLDPOP_RADIUS_KM,
   clampPopulationRadiusKm,
   geoJsonCircle,
-  interpolatedCumulativePopulation,
   parsePopulationRadii,
   populationRadiiExceedWorldPopLimit,
   populationDensityFromTotal,
-  populationZonesFromCumulative,
   scalePopulationRadii,
 } from '@/lib/population';
 import { WORLDPOP_ROUTE_DEADLINE_MS, withDeadline } from '@/lib/worldpop';
@@ -109,52 +107,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 400 },
       );
     }
-    const radiiForQueries = [radii, lowRadii, highRadii].flatMap((item) => [
-      item.crater,
-      item.fireball,
-      item.blast,
-      item.minorBlast,
-      item.thermal,
-      Math.max(item.crater, item.fireball),
-      Math.max(item.crater, item.fireball, item.blast),
-      Math.max(item.crater, item.fireball, item.blast, item.thermal),
-    ]);
-    const uniqueRadii = Array.from(new Set([
-      radiusKm,
-      ...radiiForQueries,
-    ].filter((value) => value > 0).map((value) => clampPopulationRadiusKm(value))));
-    const totals = new Map<number, number>();
-
     const routeController = new AbortController();
-    await withDeadline(
-      Promise.all(uniqueRadii.map(async (value) => {
-        const total = await fetchWorldPopTotal(lat, lng, value, routeController.signal);
-        if (total !== null && Number.isFinite(total)) totals.set(value, Math.max(0, total));
-      })),
+    const totalPopulation = await withDeadline(
+      fetchWorldPopTotal(lat, lng, radiusKm, routeController.signal),
       WORLDPOP_ROUTE_DEADLINE_MS,
       () => routeController.abort(),
     );
-
-    if (totals.size !== uniqueRadii.length) {
-      return NextResponse.json({ error: 'WorldPop estimate is incomplete.' }, { status: 504 });
-    }
-
-    const totalPopulation = totals.get(radiusKm) ?? null;
     if (totalPopulation === null || !Number.isFinite(totalPopulation)) {
       return NextResponse.json({ error: 'WorldPop estimate is not ready.' }, { status: 504 });
     }
 
-    const populationAt = (value: number) => interpolatedCumulativePopulation(value, (queryRadiusKm) => totals.get(queryRadiusKm) as number);
-    const zones = populationZonesFromCumulative(radii, populationAt);
-    const lowZones = populationZonesFromCumulative(lowRadii, populationAt);
-    const highZones = populationZonesFromCumulative(highRadii, populationAt);
-
-    return NextResponse.json({
-      ...populationDensityFromTotal(Math.max(0, totalPopulation), radiusKm),
-      zonePopulations: zones,
-      lowZonePopulations: lowZones,
-      highZonePopulations: highZones,
-    });
+    return NextResponse.json(populationDensityFromTotal(Math.max(0, totalPopulation), radiusKm));
   } catch (error) {
     const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
     return NextResponse.json(

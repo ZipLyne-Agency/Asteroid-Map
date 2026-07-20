@@ -832,7 +832,7 @@ export default function Home() {
             {populationEstimateStatus === 'loading' ? 'Estimating WorldPop density...' : 'Use WorldPop footprint density'}
           </span>
           <span className="block text-[10.5px] leading-snug text-slate-500">
-            Estimates residential population separately for each mapped effect ring.
+            Estimates residential population for the complete modeled footprint, then applies its average density across effect rings.
           </span>
         </button>
         {customDensitySource && (

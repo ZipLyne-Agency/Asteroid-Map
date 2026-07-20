@@ -101,7 +101,7 @@ export function populationDensityFromTotal(totalPopulation: number, radiusKm: nu
     sourceName: 'WorldPop Global Project',
     sourceUrl: 'https://api.worldpop.org/v1/services',
     year: WORLDPOP_YEAR,
-    note: 'Residential population estimate inside the modeled footprint, using WorldPop 100 m gridded estimates. When effect-ring totals are returned, casualty ranges use those ring populations instead of one uniform density.',
+    note: 'Residential population estimate inside the modeled footprint using WorldPop 100 m gridded estimates. The casualty model applies the resulting footprint-average density uniformly across effect rings.',
   };
 }
 
