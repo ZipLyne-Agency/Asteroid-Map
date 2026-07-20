@@ -68,7 +68,7 @@ async function fetchWorldPopTotal(
   const response = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },
     cache: 'no-store',
-    signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(35_000)]),
   });
 
   if (!response.ok) return null;

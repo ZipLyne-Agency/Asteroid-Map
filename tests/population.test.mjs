@@ -14,9 +14,10 @@ import {
   populationZonesFromCumulative,
   scalePopulationRadii,
 } from '../lib/population.ts';
-import { withDeadline } from '../lib/worldpop.ts';
+import { WORLDPOP_ROUTE_DEADLINE_MS, withDeadline } from '../lib/worldpop.ts';
 
 test('WorldPop work is rejected at the route deadline instead of hanging', async () => {
+  assert.equal(WORLDPOP_ROUTE_DEADLINE_MS, 40_000);
   const startedAt = Date.now();
 
   await assert.rejects(

@@ -1,4 +1,4 @@
-export const WORLDPOP_ROUTE_DEADLINE_MS = 20_000;
+export const WORLDPOP_ROUTE_DEADLINE_MS = 40_000;
 
 export function withDeadline<T>(
   operation: Promise<T>,

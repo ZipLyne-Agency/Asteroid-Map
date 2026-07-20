@@ -82,7 +82,7 @@ test('public proxy routes reject abusive inputs before upstream requests', () =>
   assert.match(worldPopRouteSource, /export const maxDuration = 60/);
   assert.match(worldPopRouteSource, /url\.searchParams\.set\('runasync', 'false'\)/);
   assert.match(worldPopRouteSource, /withDeadline/);
-  assert.match(worldPopRouteSource, /AbortSignal\.any\(\[signal, AbortSignal\.timeout\(12_000\)\]\)/);
+  assert.match(worldPopRouteSource, /AbortSignal\.any\(\[signal, AbortSignal\.timeout\(35_000\)\]\)/);
   assert.match(worldPopRouteSource, /cache: 'no-store'/);
 });
 
