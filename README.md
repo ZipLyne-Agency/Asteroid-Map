@@ -191,7 +191,7 @@ Set `NEXT_PUBLIC_SITE_URL` to the public HTTPS origin when deploying somewhere o
 - NASA/JPL close-approach records are retrieved server-side from the public SBDB CAD API.
 - Place searches and reverse geocoding are proxied to OpenStreetMap Nominatim.
 - WorldPop population lookup is optional and sends the selected coordinates and modeled radii to the WorldPop API through the server.
-- The browser loads map styles and tiles from CARTO. CARTO therefore receives ordinary web-request metadata such as IP address and user agent.
+- The browser loads map styles and tiles from OpenFreeMap. OpenFreeMap therefore receives ordinary web-request metadata such as IP address and user agent.
 - Simulation choices are kept in the page URL so a scenario can be bookmarked or shared. Do not share a precise location if you consider it sensitive.
 - The application itself has no accounts, analytics, advertising, or cookies.
 

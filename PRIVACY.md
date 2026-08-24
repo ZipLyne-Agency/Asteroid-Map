@@ -8,7 +8,7 @@ The selected latitude, longitude, location label, asteroid inputs, and optional 
 
 ## Third-party services
 
-- The browser requests map styles, tiles, fonts, and attribution from CARTO. CARTO can receive standard request metadata, including IP address, user agent, and requested tile coordinates.
+- The browser requests map styles, tiles, fonts, and attribution from OpenFreeMap. OpenFreeMap can receive standard request metadata, including IP address, user agent, and requested tile coordinates.
 - Location search text and map-selected coordinates are sent to this application's server and proxied to OpenStreetMap Nominatim.
 - NASA/JPL close-approach data is requested by the server from the public SBDB CAD API.
 - If you choose the WorldPop estimate, the selected coordinates and modeled effect radii are sent to this application's server and then to WorldPop.

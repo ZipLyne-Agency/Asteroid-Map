@@ -16,6 +16,12 @@ import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
 import Supercluster from 'supercluster';
 import { useAppStore } from '@/lib/store';
 import { MAJOR_CITIES } from '@/lib/major-cities';
+import {
+  PRIMARY_MAP_STYLE,
+  type AppMapStyle,
+  isIgnorableMapLoadError,
+  nextMapStyle,
+} from '@/lib/map-style';
 
 interface ReverseGeocodeResponse { name?: string | null }
 interface BusinessPointProperties {
@@ -34,7 +40,7 @@ const CLUSTER_LAYER: LayerProps = {
 };
 const CLUSTER_COUNT_LAYER: LayerProps = {
   id: 'cluster-count', type: 'symbol', filter: ['has', 'point_count'],
-  layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 11, 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'] },
+  layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 11, 'text-font': ['Noto Sans Regular'] },
   paint: { 'text-color': '#F5F3FF' },
 };
 const UNCLUSTERED_LAYER: LayerProps = {
@@ -50,7 +56,7 @@ const UNCLUSTERED_LAYER: LayerProps = {
 const CITY_LABEL_LAYER: LayerProps = {
   id: 'major-city-labels', type: 'symbol',
   filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'pointType'], 'major_city']],
-  layout: { 'text-field': ['get', 'name'], 'text-size': 9, 'text-offset': [0, 1.1], 'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'] },
+  layout: { 'text-field': ['get', 'name'], 'text-size': 9, 'text-offset': [0, 1.1], 'text-font': ['Noto Sans Regular'] },
   paint: { 'text-color': '#94A3B8', 'text-halo-color': '#07080F', 'text-halo-width': 1.5 },
 };
 
@@ -121,6 +127,9 @@ export default function DirectoryMap() {
   const setLocation = useAppStore((state) => state.setLocation);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [mapStyle, setMapStyle] = useState<AppMapStyle>(PRIMARY_MAP_STYLE);
+  const mapStyleRef = useRef<AppMapStyle>(PRIMARY_MAP_STYLE);
+  const mapReadyRef = useRef(false);
   const [animProg, setAnimProg] = useState(0);
   const [zoom, setZoom] = useState(3);
   const [bounds, setBounds] = useState<[number, number, number, number]>([-180, -90, 180, 90]);
@@ -270,17 +279,33 @@ export default function DirectoryMap() {
         minZoom={1.5} maxZoom={18}
         scrollZoom doubleClickZoom dragRotate={false} touchPitch={false}
         onMove={(e) => handleZoomChange(e.viewState.zoom)}
-        onLoad={() => { setMapReady(true); handleMove(); }}
+        onLoad={() => {
+          mapReadyRef.current = true;
+          setMapReady(true);
+          setMapError(null);
+          handleMove();
+        }}
         onMoveEnd={handleMove}
         interactiveLayerIds={['clusters', 'unclustered-point', 'major-city-labels']}
         onClick={handleMapClick}
         onError={(e) => {
+          if (isIgnorableMapLoadError(e.error)) return;
           const msg = e.error?.message ?? 'Map failed to load.';
           // Map errors can fire during a Layer render; defer the state update to
           // the next frame so we never setState mid-render.
-          requestAnimationFrame(() => setMapError(msg));
+          requestAnimationFrame(() => {
+            if (!mapReadyRef.current) {
+              const fallback = nextMapStyle(mapStyleRef.current);
+              if (fallback) {
+                mapStyleRef.current = fallback;
+                setMapStyle(fallback);
+                return;
+              }
+              setMapError(msg);
+            }
+          });
         }}
-        mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+        mapStyle={mapStyle}
       >
         <NavigationControl showCompass={false} position="top-right" />
         <GeolocateControl
