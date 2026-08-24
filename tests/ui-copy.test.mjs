@@ -98,6 +98,13 @@ test('metadata and document structure use canonical, crawl-safe semantics', () =
   assert.match(nextConfigSource, /frame-ancestors 'none'/);
 });
 
+test('map loads OpenFreeMap tiles instead of CARTO CDN style.json', () => {
+  assert.doesNotMatch(mapSource, /basemaps\.cartocdn\.com/);
+  assert.match(mapSource, /PRIMARY_MAP_STYLE/);
+  assert.match(nextConfigSource, /tiles\.openfreemap\.org/);
+  assert.doesNotMatch(nextConfigSource, /cartocdn/);
+});
+
 test('public docs describe casualty and seismic outputs conservatively', () => {
   const docs = `${readmeSource}\n${llmsSource}\n${jsonLdSource}\n${mapSource}`;
 
