@@ -3,7 +3,7 @@
 > Interactive web app that maps first-order asteroid impact effects on Earth: crater size, fireball, blast wave, window-damage, thermal zones, and rough population exposure ranges using science-based scaling formulas.
 
 ## What it does
-- Pick a world map location (or use a city) as the impact point.
+- Pick a world map location (or use a city) as the impact point. First visit asks for browser geolocation; if denied, a curated city for the browser timezone is used.
 - Choose a curated asteroid or live NASA/JPL close-approach record, then set target location, impact angle, target material, and population-density scenario.
 - See animated impact rings on a dark map (OpenFreeMap dark basemap) and a detailed report: energy in megatons, seismic energy equivalent, global frequency estimate, zone radii, modeled exposed population, broad casualty ranges, and uninjured-survivor ranges tied to explicit uniform-density scenarios or optional WorldPop effect-ring estimates.
 

@@ -19,6 +19,7 @@ export const MAJOR_CITIES: MajorCity[] = [
   { id: 'rome', name: 'Rome', country: 'IT', lat: 41.9028, lng: 12.4964 },
   { id: 'moscow', name: 'Moscow', country: 'RU', lat: 55.7558, lng: 37.6173 },
   { id: 'istanbul', name: 'Istanbul', country: 'TR', lat: 41.0082, lng: 28.9784 },
+  { id: 'tel-aviv', name: 'Tel Aviv', country: 'IL', lat: 32.0853, lng: 34.7818 },
   { id: 'cairo', name: 'Cairo', country: 'EG', lat: 30.0444, lng: 31.2357 },
   { id: 'lagos', name: 'Lagos', country: 'NG', lat: 6.5244, lng: 3.3792 },
   { id: 'nairobi', name: 'Nairobi', country: 'KE', lat: -1.2921, lng: 36.8219 },

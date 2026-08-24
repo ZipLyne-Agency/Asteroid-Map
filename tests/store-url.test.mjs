@@ -208,3 +208,27 @@ test('shared URLs restore curated asteroid source and uncertainty metadata', () 
   assert.match(asteroid?.inputUncertainty ?? '', /local injuries/);
   assert.equal(asteroid?.blurb?.includes('1,600'), true);
 });
+
+test('a URL without coordinates does not invent a 0,0 ocean location', () => {
+  resetStore();
+  installWindow('');
+  hydrateFromUrl();
+  assert.equal(useAppStore.getState().location, null);
+});
+
+test('poisoned 0,0 coordinate labels from the old URL parser are ignored', () => {
+  resetStore();
+  installWindow('?lat=0.00000&lng=0.00000&loc=0.0000%2C+0.0000');
+  hydrateFromUrl();
+  assert.equal(useAppStore.getState().location, null);
+});
+
+test('explicit 0,0 with a real place name is kept', () => {
+  resetStore();
+  installWindow('?lat=0&lng=0&loc=Gulf%20of%20Guinea');
+  hydrateFromUrl();
+  const location = useAppStore.getState().location;
+  assert.equal(location?.lat, 0);
+  assert.equal(location?.lng, 0);
+  assert.equal(location?.name, 'Gulf of Guinea');
+});

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ImpactResults, TargetMaterial } from '../lib/physics';
+import { parseUrlLocation } from './location.ts';
 
 export interface Location {
   lng: number;
@@ -264,12 +265,8 @@ export function hydrateFromUrl() {
     store.setCustomDensityPerKm2(clampOptionalNumber(params.get('densityCustom'), 0, MAX_CUSTOM_DENSITY_PER_KM2) ?? null);
   }
 
-  const lat = Number(params.get('lat'));
-  const lng = Number(params.get('lng'));
-  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-    const locName = params.get('loc')?.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    store.setLocation({ lat, lng, name: locName });
-  }
+  const location = parseUrlLocation(params);
+  if (location) store.setLocation(location);
 }
 
 function clampNumber(raw: string | null, min: number, max: number, fallback: number): number {

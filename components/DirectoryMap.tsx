@@ -16,6 +16,7 @@ import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
 import Supercluster from 'supercluster';
 import { useAppStore } from '@/lib/store';
 import { MAJOR_CITIES } from '@/lib/major-cities';
+import { reverseGeocodeName } from '@/lib/location';
 import {
   PRIMARY_MAP_STYLE,
   type AppMapStyle,
@@ -23,7 +24,6 @@ import {
   nextMapStyle,
 } from '@/lib/map-style';
 
-interface ReverseGeocodeResponse { name?: string | null }
 interface BusinessPointProperties {
   cluster: boolean; pointType: 'major_city' | 'selected';
   businessId: string; name: string; googleMapsUrl: string | null;
@@ -103,14 +103,6 @@ function getBoundsFromPolygon(polygon: Feature<Polygon>): [[number, number], [nu
     maxLng = Math.max(maxLng, lng); maxLat = Math.max(maxLat, lat);
   }
   return [[minLng, minLat], [maxLng, maxLat]];
-}
-
-async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
-  try {
-    const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
-    const data: ReverseGeocodeResponse = await res.json();
-    return data.name ?? null;
-  } catch { return null; }
 }
 
 function formatDist(m: number): string {
@@ -261,7 +253,7 @@ export default function DirectoryMap() {
       return;
     }
     const { lng, lat } = e.lngLat;
-    void reverseGeocode(lat, lng).then((name) => setLocation({ lat, lng, name: name ?? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` }));
+    void reverseGeocodeName(lat, lng).then((name) => setLocation({ lat, lng, name: name ?? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` }));
   };
 
   const zonesVisible =
@@ -313,8 +305,8 @@ export default function DirectoryMap() {
           positionOptions={{ enableHighAccuracy: true }}
           onGeolocate={(pos) => {
             const lat = pos.coords.latitude; const lng = pos.coords.longitude;
-            void reverseGeocode(lat, lng).then((name) => {
-              setLocation({ lat, lng, name: name ?? 'Current Location' });
+            void reverseGeocodeName(lat, lng).then((name) => {
+              setLocation({ lat, lng, name: name ?? 'Current location' });
               mapRef.current?.easeTo({ center: [lng, lat], zoom: 12, duration: 450 });
             });
           }}
@@ -380,7 +372,7 @@ export default function DirectoryMap() {
             onDragEnd={(e) => {
               if (simulationStatus !== 'idle') return;
               const { lat, lng } = e.lngLat;
-              void reverseGeocode(lat, lng).then((name) => setLocation({ lat, lng, name: name ?? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` }));
+              void reverseGeocodeName(lat, lng).then((name) => setLocation({ lat, lng, name: name ?? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` }));
             }}
           >
             <div className="relative flex items-center justify-center">

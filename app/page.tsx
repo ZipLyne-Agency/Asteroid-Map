@@ -7,6 +7,16 @@ import type { Asteroid } from '@/lib/store';
 import { calculateImpact, estimateCasualties, estimateCasualtiesFromZonePopulations, ASTEROID_DENSITIES, TARGET_DENSITIES, MIN_NATURAL_IMPACT_VELOCITY_KM_S, flybyRelativeToImpactVelocity, type CasualtyZonePopulations, type TargetMaterial } from '@/lib/physics';
 import { KNOWN_ASTEROID_CATEGORIES, type KnownAsteroidCategory } from '@/lib/known-asteroids';
 import { MAJOR_CITIES } from '@/lib/major-cities';
+import {
+  cityIdMatchingLocation,
+  fallbackCityForTimeZone,
+  landingSearchParams,
+  locationFromCity,
+  parseUrlLocation,
+  requestBrowserCoordinates,
+  reverseGeocodeName,
+  shouldApplyBrowserCoordinates,
+} from '@/lib/location';
 import { formatBig, formatRange, formatRecurrence } from '@/lib/format';
 import { populationRadiiToQuery } from '@/lib/population';
 import { decodeZonePopulationEstimate, urlWithZonePopulationEstimate } from '@/lib/share-population';
@@ -313,7 +323,7 @@ export default function Home() {
   const [liveAsteroids, setLiveAsteroids] = useState<Asteroid[]>([]);
   const [liveAsteroidNote, setLiveAsteroidNote] = useState<string | null>(null);
   const [isLoadingAsteroids, setIsLoadingAsteroids] = useState(true);
-  const [selectedCityId, setSelectedCityId] = useState('');
+
   const [populationEstimateStatus, setPopulationEstimateStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [populationEstimateError, setPopulationEstimateError] = useState<string | null>(null);
   const [zonePopulationEstimate, setZonePopulationEstimate] = useState<{
@@ -330,8 +340,30 @@ export default function Home() {
   const asteroidAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const shared = parseUrlLocation(landingSearchParams());
     hydrateFromUrl();
-  }, []);
+    if (shared) return;
+
+    const fallback = locationFromCity(
+      fallbackCityForTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
+    );
+    if (!useAppStore.getState().location) setLocation(fallback);
+
+    let cancelled = false;
+    void requestBrowserCoordinates().then(async (coords) => {
+      if (cancelled || !coords) return;
+      const state = useAppStore.getState();
+      if (!shouldApplyBrowserCoordinates(state.location, fallback, state.simulationStatus)) return;
+      const name = await reverseGeocodeName(coords.lat, coords.lng);
+      if (cancelled) return;
+      const latest = useAppStore.getState();
+      if (!shouldApplyBrowserCoordinates(latest.location, fallback, latest.simulationStatus)) return;
+      setLocation({ lat: coords.lat, lng: coords.lng, name: name ?? 'Current location' });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setLocation]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -464,8 +496,9 @@ export default function Home() {
     }
   };
 
+  const selectedCityId = location ? cityIdMatchingLocation(location) : '';
+
   const pickCity = (cityId: string) => {
-    setSelectedCityId(cityId);
     const city = MAJOR_CITIES.find((c) => c.id === cityId);
     if (!city) return;
     setLocation({ lng: city.lng, lat: city.lat, name: `${city.name}, ${city.country}` });
