@@ -1017,13 +1017,25 @@ export default function Home() {
     </div>
   );
 
+  const ZipLyneCredit = (
+    <a
+      href="https://ziplyne.agency"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 text-[11px] font-semibold text-slate-200 underline decoration-slate-500 underline-offset-4 hover:text-white hover:decoration-white sm:text-[12.5px]"
+    >
+      Designed and Developed by ZipLyne
+    </a>
+  );
+
   // ── MOBILE ──────────────────────────────────────────────────────────────────
   if (isMobile) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#07080f]">
-        <header className="z-40 flex shrink-0 items-center border-b border-white/[0.07] bg-[#07080f]/90 px-4"
+        <header className="z-40 flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] bg-[#07080f]/90 px-4"
           style={{ height: 'calc(54px + env(safe-area-inset-top))', paddingTop: 'env(safe-area-inset-top)' }}>
           {Logo}
+          {ZipLyneCredit}
         </header>
 
         <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -1075,13 +1087,16 @@ export default function Home() {
       <header className="z-40 flex h-14 shrink-0 items-center gap-4 border-b border-white/[0.07] px-5">
         {Logo}
         <span className="ml-1 hidden text-[12.5px] text-slate-500 lg:block">What happens if an asteroid hits your city? Find out 👇</span>
-        {isCompleted && (
-          <button type="button" onClick={handleShare}
-            className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-slate-200 hover:bg-white/[0.08]">
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          {ZipLyneCredit}
+          {isCompleted && (
+            <button type="button" onClick={handleShare}
+              className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-slate-200 hover:bg-white/[0.08]">
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? 'Copied!' : 'Share'}
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="relative flex flex-1 overflow-hidden">
