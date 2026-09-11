@@ -1019,9 +1019,9 @@ export default function Home() {
 
   const ZipLyneCredit = (
     <a
-      href="https://ziplyne.agency"
+      href="https://ziplyne.agency/?utm_source=asteroidmap.com&utm_medium=referral&utm_campaign=designed-and-developed&utm_content=footer"
       target="_blank"
-      rel="noopener noreferrer"
+      rel="noopener"
       className="shrink-0 text-[11px] font-semibold text-slate-200 underline decoration-slate-500 underline-offset-4 hover:text-white hover:decoration-white sm:text-[12.5px]"
     >
       Designed and Developed by ZipLyne
