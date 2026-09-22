@@ -7,3 +7,7 @@ coverage/
 .env*
 !.env.example
 .vercel
+
+# Cloudflare
+.open-next
+.wrangler
