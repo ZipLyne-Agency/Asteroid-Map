@@ -18,7 +18,21 @@ test('invalid canonical site URL falls back to production origin', () => {
   const previous = process.env.NEXT_PUBLIC_SITE_URL;
   process.env.NEXT_PUBLIC_SITE_URL = 'javascript:alert(1)';
   try {
-    assert.equal(getSiteUrl(), 'https://asteroidmap.com');
+    assert.equal(getSiteUrl(), 'https://www.asteroidmap.com');
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = previous;
+  }
+});
+
+
+test('production domain overrides use the final canonical host', () => {
+  const previous = process.env.NEXT_PUBLIC_SITE_URL;
+  try {
+    for (const url of ['https://asteroidmap.com/', 'https://www.asteroidmap.com']) {
+      process.env.NEXT_PUBLIC_SITE_URL = url;
+      assert.equal(getSiteUrl(), 'https://www.asteroidmap.com');
+    }
   } finally {
     if (previous === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
     else process.env.NEXT_PUBLIC_SITE_URL = previous;

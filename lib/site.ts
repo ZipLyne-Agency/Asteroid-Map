@@ -6,13 +6,16 @@ export function getSiteUrl(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     try {
       const configured = new URL(process.env.NEXT_PUBLIC_SITE_URL.trim());
+      if (configured.hostname === 'asteroidmap.com' || configured.hostname === 'www.asteroidmap.com') {
+        return 'https://www.asteroidmap.com';
+      }
       if (configured.protocol === 'http:' || configured.protocol === 'https:') return configured.origin;
     } catch {
       // Fall through to the environment-specific default.
     }
   }
   if (process.env.NODE_ENV === 'development') return 'http://localhost:3000';
-  return 'https://asteroidmap.com';
+  return 'https://www.asteroidmap.com';
 }
 
 export const SITE_NAME = 'Asteroid Impact Simulator';
